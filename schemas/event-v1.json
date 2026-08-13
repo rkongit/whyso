@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worktree.dev/schemas/event-v1.json",
+  "title": "Worktree Agent Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "event_id",
+    "session_id",
+    "timestamp",
+    "agent",
+    "event_type",
+    "payload"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt_.+"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^sess_.+"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Assigned by the Worktree daemon; omitted on ingest."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "session.started",
+        "session.ended",
+        "prompt.submitted",
+        "tool.started",
+        "tool.completed",
+        "file.read",
+        "file.created",
+        "file.modified",
+        "file.deleted",
+        "command.started",
+        "command.completed",
+        "test.started",
+        "test.completed",
+        "agent.response",
+        "error"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

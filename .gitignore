@@ -1,0 +1,14 @@
+bin/
+obj/
+publish/
+**/[Bb]in/
+**/[Oo]bj/
+.DS_Store
+Thumbs.db
+.ai-worktree/
+.idea/
+.vscode/
+*.user
+*.suo
+*.swp
+*.swo

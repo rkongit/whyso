@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>worktree</AssemblyName>
+    <RootNamespace>Worktree.Cli</RootNamespace>
+    <!-- Single-file publish must unpack native SQLite (e_sqlite3). -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Worktree.Events\Worktree.Events.csproj" />
+    <ProjectReference Include="..\Worktree.Storage\Worktree.Storage.csproj" />
+    <ProjectReference Include="..\Worktree.Daemon\Worktree.Daemon.csproj" />
+    <ProjectReference Include="..\Worktree.Adapter.Cursor\Worktree.Adapter.Cursor.csproj" />
+    <ProjectReference Include="..\Worktree.Activities\Worktree.Activities.csproj" />
+    <ProjectReference Include="..\Worktree.Ui\Worktree.Ui.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyUiWwwroot" AfterTargets="Build;Publish">
+    <PropertyGroup>
+      <_WwwrootDest Condition="'$(PublishDir)' != ''">$(PublishDir)wwwroot\</_WwwrootDest>
+      <_WwwrootDest Condition="'$(PublishDir)' == ''">$(OutputPath)wwwroot\</_WwwrootDest>
+    </PropertyGroup>
+    <ItemGroup>
+      <_UiWwwrootFiles Include="..\Worktree.Ui\wwwroot\**\*" Condition="Exists('..\Worktree.Ui\wwwroot\index.html')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_UiWwwrootFiles)"
+          DestinationFiles="@(_UiWwwrootFiles->'$(_WwwrootDest)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(_UiWwwrootFiles)' != ''" />
+  </Target>
+
+</Project>
