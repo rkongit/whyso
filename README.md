@@ -7,7 +7,13 @@ changes, commands — into a local, append-only store.
 > **Phase 1** focuses on reliable raw event capture for **Cursor**.
 > Higher-level analysis, UI, and multi-agent support come later.
 
-## Install
+## Download
+
+Download the latest Windows binary from the **[Releases](https://github.com/rkongit/worktree/releases/latest)** page.
+
+Then put `worktree.exe` on your `PATH`, or invoke it by absolute path.
+
+## Install from source
 
 Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), Git, and SQLite (bundled).
 
