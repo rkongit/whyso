@@ -122,6 +122,30 @@ public static class Git
         return tokens.Skip(1).Any(t => t == "commit");
     }
 
+    /// <summary>Notes ref used for provenance: <c>refs/notes/whyso</c>.</summary>
+    public const string NotesRef = "whyso";
+
+    /// <summary>Writes (or replaces) the Whyso note on a commit. Returns false if git failed.</summary>
+    public static bool WriteNote(string root, string sha, string message)
+    {
+        var (exit, _, _) = Run(root, "notes", $"--ref={NotesRef}", "add", "-f", "-m", message, sha);
+        return exit == 0;
+    }
+
+    /// <summary>Reads the Whyso note on a commit, or null when there is none.</summary>
+    public static string? ReadNote(string root, string sha)
+    {
+        var (exit, stdout, _) = Run(root, "notes", $"--ref={NotesRef}", "show", sha);
+        return exit == 0 && !string.IsNullOrWhiteSpace(stdout) ? stdout.Trim() : null;
+    }
+
+    /// <summary>Resolves a full or abbreviated SHA to the full commit SHA.</summary>
+    public static string? ResolveCommit(string root, string rev)
+    {
+        var (exit, stdout, _) = Run(root, "rev-parse", "--verify", "--quiet", rev + "^{commit}");
+        return exit == 0 ? stdout.Trim() : null;
+    }
+
     private static (int ExitCode, string StdOut, string StdErr) Run(string cwd, params string[] args)
     {
         var psi = new ProcessStartInfo

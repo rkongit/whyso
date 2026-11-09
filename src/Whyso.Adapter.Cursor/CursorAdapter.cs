@@ -13,8 +13,8 @@ public sealed class AdapterException : Exception
 
 public static class CursorAdapter
 {
-    public const int MaxStringBytes = 64 * 1024;
-    public const string DefaultEventsUrl = "http://127.0.0.1:9477/v1/events";
+    public const int MaxStringBytes = HookSupport.MaxStringBytes;
+    public const string DefaultEventsUrl = HookSupport.DefaultEventsUrl;
 
     public static readonly string[] CursorHookNames =
     [
@@ -112,41 +112,7 @@ public static class CursorAdapter
         return new JsonObject();
     }
 
-    public static AgentEvent PostEvent(AgentEvent event_, string url)
-    {
-        // Match SQLite busy_timeout (5s) so a locked DB does not outlive the HTTP client.
-        const int maxAttempts = 3;
-        Exception? last = null;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
-            {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                using var content = new StringContent(event_.ToJson(), Encoding.UTF8, "application/json");
-                using var response = client.PostAsync(url, content).GetAwaiter().GetResult();
-                var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new AdapterException($"HTTP error: {(int)response.StatusCode} {body}");
-                }
-
-                return AgentEvent.FromJson(body);
-            }
-            catch (Exception ex) when (attempt < maxAttempts)
-            {
-                last = ex;
-                Thread.Sleep(50 * attempt);
-            }
-            catch (Exception ex)
-            {
-                last = ex;
-            }
-        }
-
-        throw last is AdapterException ae
-            ? ae
-            : new AdapterException($"HTTP error: {last?.Message ?? "unknown"}", last!);
-    }
+    public static AgentEvent PostEvent(AgentEvent event_, string url) => HookSupport.PostEvent(event_, url);
 
     public static string CursorHookCommand(string worktreeBin) =>
         $"\"{worktreeBin}\" hook cursor";
@@ -195,12 +161,7 @@ public static class CursorAdapter
         return root;
     }
 
-    private static bool IsWorktreeHookCommand(string command)
-    {
-        var lower = command.ToLowerInvariant();
-        // Matches the current "whyso" binary and the pre-rename "worktree" one, so integrate replaces both.
-        return (lower.Contains("whyso") || lower.Contains("worktree")) && lower.Contains("hook") && lower.Contains("cursor");
-    }
+    private static bool IsWorktreeHookCommand(string command) => HookSupport.IsOwnHookCommand(command, "cursor");
 
     private static EventType? MapHookToEventType(string hook) => hook switch
     {
@@ -286,105 +247,10 @@ public static class CursorAdapter
         return payload;
     }
 
-    private static void CopyFields(JsonObject src, JsonObject dst, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (src[key] is not null)
-            {
-                dst[key] = src[key]!.DeepClone();
-            }
-        }
-    }
+    private static void CopyFields(JsonObject src, JsonObject dst, params string[] keys) =>
+        HookSupport.CopyFields(src, dst, keys);
 
-    private static void TruncateStrings(JsonNode? value, int maxBytes)
-    {
-        switch (value)
-        {
-            case JsonValue jv when jv.TryGetValue<string>(out var s):
-                // Leaf string handled by parent object/array mutation.
-                break;
-            case JsonArray arr:
-                for (var i = 0; i < arr.Count; i++)
-                {
-                    if (arr[i] is JsonValue sv && sv.TryGetValue<string>(out var s) && s.Length > maxBytes)
-                    {
-                        arr[i] = Truncate(s, maxBytes);
-                    }
-                    else
-                    {
-                        TruncateStrings(arr[i], maxBytes);
-                    }
-                }
+    private static void TruncateStrings(JsonNode? value, int maxBytes) => HookSupport.TruncateStrings(value, maxBytes);
 
-                break;
-            case JsonObject map:
-            {
-                var truncated = false;
-                foreach (var key in map.Select(kv => kv.Key).ToList())
-                {
-                    if (key == "_truncated")
-                    {
-                        continue;
-                    }
-
-                    if (map[key] is JsonValue sv && sv.TryGetValue<string>(out var s) && s.Length > maxBytes)
-                    {
-                        map[key] = Truncate(s, maxBytes);
-                        truncated = true;
-                    }
-                    else
-                    {
-                        TruncateStrings(map[key], maxBytes);
-                    }
-                }
-
-                if (truncated)
-                {
-                    map["_truncated"] = true;
-                }
-
-                break;
-            }
-        }
-    }
-
-    private static string Truncate(string s, int maxBytes)
-    {
-        if (s.Length <= maxBytes)
-        {
-            return s;
-        }
-
-        var cut = s[..maxBytes];
-        while (cut.Length > 0 && char.IsHighSurrogate(cut[^1]))
-        {
-            cut = cut[..^1];
-        }
-
-        return cut;
-    }
-
-    private static void AppendHookLog(string? logPath, string message)
-    {
-        if (logPath is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var parent = Path.GetDirectoryName(logPath);
-            if (!string.IsNullOrEmpty(parent))
-            {
-                Directory.CreateDirectory(parent);
-            }
-
-            File.AppendAllText(logPath, $"{DateTimeOffset.UtcNow:O} {message}{Environment.NewLine}");
-        }
-        catch
-        {
-            // ignore
-        }
-    }
+    private static void AppendHookLog(string? logPath, string message) => HookSupport.AppendLog(logPath, message);
 }

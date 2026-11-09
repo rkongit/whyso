@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Whyso.Activities;
+using Whyso.Adapter.ClaudeCode;
 using Whyso.Adapter.Cursor;
 using Whyso.Daemon;
 using Whyso.Events;
@@ -51,6 +52,9 @@ public static class Program
         root.AddCommand(BuildSearch());
         root.AddCommand(BuildRebuild());
         root.AddCommand(BuildWhy());
+        root.AddCommand(BuildContext());
+        root.AddCommand(BuildConfig());
+        root.AddCommand(BuildNotes());
         root.AddCommand(BuildUi());
         root.AddCommand(BuildIntegrate());
         root.AddCommand(BuildHook());
@@ -137,8 +141,13 @@ public static class Program
             try
             {
                 var (root, config, store) = await OpenStoreAsync();
+                store.WriteGitNotes = config.GitNotes;
                 var state = new AppState { Store = store, Config = config };
                 Console.WriteLine($"Whyso daemon listening on http://{config.Bind}");
+                if (config.GitNotes)
+                {
+                    Console.WriteLine($"Git notes: on (refs/notes/{Git.NotesRef})");
+                }
                 Console.WriteLine("POST /v1/events  GET /v1/health");
                 Console.WriteLine("Press Ctrl+C to stop.");
                 await DaemonHost.ServeAsync(state, config.Bind);
@@ -322,7 +331,147 @@ public static class Program
             Console.WriteLine("     Debug:  .whyso/hooks.log  (and Cursor Output → Hooks)");
         });
         integrate.AddCommand(cursor);
+
+        var claudeCode = new Command(
+            "claude-code",
+            "Install Claude Code project hooks (.claude/settings.json) that forward events to Whyso");
+        claudeCode.SetHandler(() =>
+        {
+            var root = RequireGitRoot(Directory.GetCurrentDirectory());
+            var claudeDir = Path.Combine(root, ".claude");
+            Directory.CreateDirectory(claudeDir);
+            var settingsPath = Path.Combine(claudeDir, "settings.json");
+
+            JsonNode? existing = null;
+            if (File.Exists(settingsPath))
+            {
+                existing = JsonNode.Parse(File.ReadAllText(settingsPath));
+            }
+
+            var bin = ResolveWorktreeBin();
+            var command = ClaudeCodeAdapter.HookCommand(bin);
+            var merged = ClaudeCodeAdapter.MergeSettings(existing, command);
+            File.WriteAllText(
+                settingsPath,
+                JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+
+            Console.WriteLine($"Configured Claude Code integration at {Path.GetRelativePath(root, settingsPath)}");
+            Console.WriteLine($"Hook command: {command}");
+            Console.WriteLine($"Hooks: {string.Join(", ", ClaudeCodeAdapter.HookNames)}");
+            Console.WriteLine();
+            Console.WriteLine("Next steps:");
+            Console.WriteLine("  1. Keep `whyso daemon` running in this project");
+            Console.WriteLine("  2. Start a new Claude Code session here (SessionStart injects `whyso context`)");
+            Console.WriteLine("  3. Check: whyso sessions");
+            Console.WriteLine("     Debug:  .whyso/hooks.log");
+        });
+        integrate.AddCommand(claudeCode);
         return integrate;
+    }
+
+    private static Command BuildConfig()
+    {
+        var config = new Command("config", "Show or change project settings in .whyso/config.toml");
+
+        var get = new Command("get", "Show current settings");
+        get.SetHandler(() =>
+        {
+            var root = WorktreePaths.FindWorktreeRoot(Directory.GetCurrentDirectory());
+            var cfg = Config.Load(root);
+            Console.WriteLine($"bind                  = {cfg.Bind}");
+            Console.WriteLine($"context.session_start = {cfg.ContextOnSessionStart.ToString().ToLowerInvariant()}");
+            Console.WriteLine($"git.notes             = {cfg.GitNotes.ToString().ToLowerInvariant()}");
+        });
+
+        var keyArg = new Argument<string>("key", $"Setting: {string.Join(" | ", Config.BoolKeys.Keys)}");
+        var valueArg = new Argument<bool>("value", "true or false");
+        var set = new Command("set", "Change a setting (restart the daemon to apply)") { keyArg, valueArg };
+        set.SetHandler((InvocationContext ctx) =>
+        {
+            var key = ctx.ParseResult.GetValueForArgument(keyArg);
+            var value = ctx.ParseResult.GetValueForArgument(valueArg);
+            var root = WorktreePaths.FindWorktreeRoot(Directory.GetCurrentDirectory());
+            var cfg = Config.Load(root);
+            if (!cfg.TrySet(key, value))
+            {
+                Console.Error.WriteLine($"unknown setting '{key}' (expected {string.Join(", ", Config.BoolKeys.Keys)})");
+                ctx.ExitCode = 1;
+                return;
+            }
+
+            Config.Save(root, cfg);
+            Console.WriteLine($"{key} = {value.ToString().ToLowerInvariant()} (restart `whyso daemon` to apply)");
+        });
+
+        config.AddCommand(get);
+        config.AddCommand(set);
+        return config;
+    }
+
+    private static Command BuildNotes()
+    {
+        var notes = new Command("notes", $"Git notes provenance (refs/notes/{Git.NotesRef})");
+        var write = new Command("write", "Write notes for every commit already linked to a session");
+        write.SetHandler(async () =>
+        {
+            var (_, _, store) = await OpenStoreAsync();
+            var shas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var session in await store.ListSessionsAsync())
+            {
+                foreach (var commit in await store.ListSessionCommitsAsync(session.Id))
+                {
+                    shas.Add(commit.Sha);
+                }
+            }
+
+            var written = 0;
+            foreach (var sha in shas)
+            {
+                if (await store.WriteProvenanceNoteAsync(sha))
+                {
+                    written++;
+                }
+            }
+
+            Console.WriteLine($"Wrote {written} of {shas.Count} notes to refs/notes/{Git.NotesRef}");
+            Console.WriteLine($"Share them with: git push origin refs/notes/{Git.NotesRef}");
+        });
+        notes.AddCommand(write);
+        return notes;
+    }
+
+    private static Command BuildContext()
+    {
+        var formatOpt = new Option<string>("--format", () => "md", "Output format: md or json");
+        var sessionsOpt = new Option<int>("--sessions", () => 10, "How many recent sessions to scan");
+        var maxCharsOpt = new Option<int>("--max-chars", () => 4000, "Maximum length of the markdown brief");
+        var cmd = new Command(
+            "context",
+            "Print a short brief of past decisions and rejected approaches for a new agent session")
+        {
+            formatOpt,
+            sessionsOpt,
+            maxCharsOpt,
+        };
+        cmd.SetHandler(async (string format, int sessions, int maxChars) =>
+        {
+            var (_, _, store) = await OpenStoreAsync();
+            var options = new ContextBriefOptions { MaxSessions = sessions, MaxChars = maxChars };
+            if (format == "json")
+            {
+                var items = await ContextBrief.CollectAsync(store, options);
+                Console.WriteLine(JsonSerializer.Serialize(items, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                }));
+                return;
+            }
+
+            var markdown = await ContextBrief.BuildMarkdownAsync(store, options);
+            Console.Write(string.IsNullOrEmpty(markdown) ? "No past sessions with readable prompts yet.\n" : markdown);
+        }, formatOpt, sessionsOpt, maxCharsOpt);
+        return cmd;
     }
 
     private static Command BuildActivity()
@@ -461,6 +610,7 @@ public static class Program
             var deleted = store.ForgetSessionKey(id);
             // Rebuild the session's projection so search and summaries drop prompt text.
             await WorkNodeIndex.ProjectSessionByIdAsync(store, id);
+            await store.CheckpointAsync();
             Console.WriteLine(deleted
                 ? $"Forgot {id}: encryption key deleted; projections rebuilt."
                 : $"{id} had no encryption key (nothing to forget).");
@@ -575,10 +725,20 @@ public static class Program
         var whyCommit = new Command("commit", "Provenance for a Git commit") { shaArg };
         whyCommit.SetHandler(async (string sha) =>
         {
-            var (_, _, store) = await OpenStoreAsync();
+            var (root, _, store) = await OpenStoreAsync();
             var links = await store.ListCommitsByShaAsync(sha);
             if (links.Count == 0)
             {
+                // Fallback for clones that fetched refs/notes/whyso but have no local capture.
+                var full = Git.ResolveCommit(root, sha);
+                var note = full is null ? null : Git.ReadNote(root, full);
+                if (note is not null)
+                {
+                    Console.WriteLine($"No local capture for {sha}; provenance from refs/notes/{Git.NotesRef}:");
+                    Console.WriteLine(note);
+                    return;
+                }
+
                 Console.WriteLine($"No captured provenance for commit {sha}");
                 return;
             }
@@ -737,7 +897,74 @@ public static class Program
             Console.WriteLine(response.ToJsonString());
         });
         hook.AddCommand(cursor);
+
+        var claudeCode = new Command("claude-code", "Read a Claude Code hook payload from stdin and forward it to the daemon");
+        claudeCode.SetHandler(() =>
+        {
+            // Fail open: whatever happens, exit 0 so Claude Code is never blocked.
+            try
+            {
+                var text = HookSupport.NormalizeStdin(ReadStdinUtf8());
+                var (url, logPath, projectRoot) = ResolveHookTarget(text);
+                string? sessionId = null;
+                try
+                {
+                    var raw = JsonNode.Parse(text)?["session_id"]?.GetValue<string>();
+                    sessionId = raw is null ? null : Protocol.SessionIdFromExternal(raw);
+                }
+                catch
+                {
+                    // handled by the adapter's own parse
+                }
+
+                var output = ClaudeCodeAdapter.HandleHookStdin(
+                    text,
+                    url,
+                    logPath,
+                    projectRoot is null ? null : () => BuildContextForHook(projectRoot, sessionId));
+                if (output.Length > 0)
+                {
+                    Console.WriteLine(output);
+                }
+            }
+            catch
+            {
+                // never block the agent
+            }
+        });
+        hook.AddCommand(claudeCode);
         return hook;
+    }
+
+    private static string ReadStdinUtf8()
+    {
+        using var stdin = Console.OpenStandardInput();
+        using var ms = new MemoryStream();
+        stdin.CopyTo(ms);
+        var bytes = ms.ToArray();
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+        {
+            bytes = bytes[3..];
+        }
+
+        return Encoding.UTF8.GetString(bytes);
+    }
+
+    private static string? BuildContextForHook(string projectRoot, string? currentSessionId)
+    {
+        var config = Config.Load(projectRoot);
+        if (!config.ContextOnSessionStart)
+        {
+            return null;
+        }
+
+        return Task.Run(async () =>
+        {
+            await using var store = await Store.OpenAsync(projectRoot);
+            return await ContextBrief.BuildMarkdownAsync(
+                store,
+                new ContextBriefOptions { ExcludeSessionId = currentSessionId });
+        }).GetAwaiter().GetResult();
     }
 
     private static void WriteCliError(Exception ex)
@@ -862,6 +1089,18 @@ public static class Program
 
     private static (string Url, string? LogPath) ResolveEventsUrlAndLog(string stdin)
     {
+        var (url, logPath, _) = ResolveHookTarget(stdin);
+        return (url, logPath);
+    }
+
+    /// <summary>
+    /// Finds the Whyso project a hook belongs to: Cursor's <c>workspace_roots</c>, then the
+    /// payload <c>cwd</c> (Claude Code), then the process directory. Each candidate is walked
+    /// up to the nearest initialized project (new or legacy data dir).
+    /// </summary>
+    private static (string Url, string? LogPath, string? Root) ResolveHookTarget(string stdin)
+    {
+        var candidates = new List<string>();
         try
         {
             var raw = JsonNode.Parse(stdin);
@@ -869,73 +1108,51 @@ public static class Program
             {
                 foreach (var rootNode in roots)
                 {
-                    if (rootNode?.GetValue<string>() is not string rootStr)
+                    if (rootNode?.GetValue<string>() is string rootStr)
                     {
-                        continue;
-                    }
-
-                    var rootPath = NormalizeWorkspaceRoot(rootStr);
-                    if (Directory.Exists(Path.Combine(rootPath, ".whyso")))
-                    {
-                        try
-                        {
-                            var config = Config.Load(rootPath);
-                            return (
-                                $"http://{config.Bind}/v1/events",
-                                Path.Combine(rootPath, ".whyso", "hooks.log"));
-                        }
-                        catch
-                        {
-                            // continue
-                        }
+                        candidates.Add(NormalizeWorkspaceRoot(rootStr));
                     }
                 }
+            }
+
+            if (raw?["cwd"]?.GetValue<string>() is string payloadCwd)
+            {
+                candidates.Add(payloadCwd);
             }
         }
         catch
         {
-            // fall through
+            // fall through to the process directory
         }
 
         try
         {
-            var cwd = Directory.GetCurrentDirectory();
-            try
-            {
-                var root = WorktreePaths.FindWorktreeRoot(cwd);
-                var config = Config.Load(root);
-                return (
-                    $"http://{config.Bind}/v1/events",
-                    Path.Combine(root, ".whyso", "hooks.log"));
-            }
-            catch
-            {
-                // continue
-            }
-
-            if (Directory.Exists(Path.Combine(cwd, ".whyso")))
-            {
-                try
-                {
-                    var config = Config.Load(cwd);
-                    return (
-                        $"http://{config.Bind}/v1/events",
-                        Path.Combine(cwd, ".whyso", "hooks.log"));
-                }
-                catch
-                {
-                    // continue
-                }
-            }
-
-            return (
-                CursorAdapter.DefaultEventsUrl,
-                Path.Combine(cwd, ".whyso", "hooks.log"));
+            candidates.Add(Directory.GetCurrentDirectory());
         }
         catch
         {
-            return (CursorAdapter.DefaultEventsUrl, null);
+            // ignore
         }
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var root = WorktreePaths.FindWorktreeRoot(candidate);
+                var config = Config.Load(root);
+                return (
+                    $"http://{config.Bind}/v1/events",
+                    Path.Combine(WorktreePaths.WorktreeDir(root), "hooks.log"),
+                    root);
+            }
+            catch
+            {
+                // try the next candidate
+            }
+        }
+
+        // Not initialized anywhere: post to the default port, and don't create a log dir.
+        return (HookSupport.DefaultEventsUrl, null, null);
     }
 
     private static string NormalizeWorkspaceRoot(string root)

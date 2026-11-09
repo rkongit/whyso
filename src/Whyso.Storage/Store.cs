@@ -149,6 +149,7 @@ public sealed partial class Store : IDisposable
                 PRAGMA journal_mode = WAL;
                 PRAGMA synchronous = NORMAL;
                 PRAGMA busy_timeout = 5000;
+                PRAGMA secure_delete = ON;
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
@@ -459,7 +460,63 @@ public sealed partial class Store : IDisposable
         return await RecordSessionCommitShasAsync(sessionId, shas);
     }
 
+    /// <summary>
+    /// When true, newly attributed commits get a note under <c>refs/notes/whyso</c> (opt-in via
+    /// <c>git_notes</c> in config). Notes carry ids only, never prompt text, because notes can
+    /// be pushed.
+    /// </summary>
+    public bool WriteGitNotes { get; set; }
+
     public async Task<IReadOnlyList<string>> RecordSessionCommitShasAsync(
+        string sessionId,
+        IReadOnlyList<string> shas)
+    {
+        var inserted = await RecordSessionCommitShasCoreAsync(sessionId, shas);
+        if (WriteGitNotes)
+        {
+            foreach (var sha in inserted)
+            {
+                try
+                {
+                    await WriteProvenanceNoteAsync(sha);
+                }
+                catch
+                {
+                    // Best effort: a failed note never fails capture.
+                }
+            }
+        }
+
+        return inserted;
+    }
+
+    /// <summary>Writes the provenance note for one commit, listing every linked session.</summary>
+    public async Task<bool> WriteProvenanceNoteAsync(string sha)
+    {
+        var links = await ListCommitsByShaAsync(sha);
+        if (links.Count == 0)
+        {
+            return false;
+        }
+
+        var sessions = new JsonArray();
+        foreach (var link in links)
+        {
+            var session = await GetSessionAsync(link.SessionId);
+            sessions.Add(new JsonObject
+            {
+                ["session_id"] = link.SessionId,
+                ["prompt_event_id"] = link.PromptEventId,
+                ["agent"] = session?.Agent,
+                ["started_at"] = session?.StartedAt.ToUniversalTime().ToString("O"),
+            });
+        }
+
+        var note = new JsonObject { ["whyso"] = 1, ["sessions"] = sessions };
+        return Git.WriteNote(_root, links[0].Sha, note.ToJsonString());
+    }
+
+    private async Task<IReadOnlyList<string>> RecordSessionCommitShasCoreAsync(
         string sessionId,
         IReadOnlyList<string> shas)
     {
@@ -824,6 +881,25 @@ public sealed partial class Store : IDisposable
 
     /// <summary>Deletes the session's encryption key (crypto-shredding). Returns false if none existed.</summary>
     public bool ForgetSessionKey(string sessionId) => PayloadCrypto.DeleteKey(_root, sessionId);
+
+    /// <summary>
+    /// Flushes the WAL into the main database and truncates it, so text removed by a rebuild
+    /// (with secure_delete on) does not linger in the WAL file after a forget.
+    /// </summary>
+    public async Task CheckpointAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+            await cmd.ExecuteNonQueryAsync();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     private AgentEvent ReadEvent(SqliteDataReader reader)
     {
