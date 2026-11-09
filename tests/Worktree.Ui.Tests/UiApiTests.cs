@@ -182,5 +182,23 @@ public class UiApiTests
         var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
         Assert.Equal(config.ProjectId, body["projectId"]!.GetValue<string>());
         Assert.True(body["sessionCount"]!.GetValue<int>() >= 1);
+        Assert.Null(body["nodeCount"]);
+    }
+
+    [Fact]
+    public async Task Status_returns_sessions_and_prompts()
+    {
+        var (client, _, config, store, host) = await SetupAsync();
+        await using var _ = host;
+        await SeedSessionAsync(store, config.ProjectId, "sess_ui_status");
+
+        var response = await client.GetAsync("/api/v1/status");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.Equal(config.ProjectId, body["projectId"]!.GetValue<string>());
+        Assert.True(body["sessionCount"]!.GetValue<int>() >= 1);
+        Assert.True(body["promptCount"]!.GetValue<int>() >= 1);
+        Assert.Null(body["eventCount"]);
+        Assert.Null(body["nodeCount"]);
     }
 }

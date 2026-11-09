@@ -75,14 +75,12 @@ public static class UiHost
 
         api.MapGet("/project", async (UiState s) =>
         {
-            var nodes = await s.Store.CountWorkNodesAsync();
-            var sessions = (await s.Store.ListSessionsAsync()).Count;
+            await UiQueries.EnsureNodesAsync(s.Store);
             return Results.Json(new ProjectDto
             {
                 ProjectId = s.Config.ProjectId,
                 Root = s.Root,
-                NodeCount = nodes,
-                SessionCount = sessions,
+                SessionCount = await s.Store.CountWorkNodesAsync(),
             }, JsonOptions);
         });
 
@@ -158,6 +156,7 @@ public static class UiHost
 
         api.MapGet("/status", async (UiState s) =>
         {
+            await UiQueries.EnsureNodesAsync(s.Store);
             var daemonStatus = await UiQueries.ProbeDaemonAsync(s.Config.Bind);
             return Results.Json(new StatusDto
             {
@@ -166,9 +165,8 @@ public static class UiHost
                 Bind = s.Config.Bind,
                 DaemonStatus = daemonStatus,
                 DaemonRunning = daemonStatus == "running",
-                SessionCount = await s.Store.CountSessionsAsync(),
-                EventCount = await s.Store.CountEventsAsync(),
-                NodeCount = await s.Store.CountWorkNodesAsync(),
+                SessionCount = await s.Store.CountWorkNodesAsync(),
+                PromptCount = await s.Store.CountPromptsAsync(),
             }, JsonOptions);
         });
 

@@ -110,6 +110,9 @@ public class CliIntegrationTests
             var status = RunWorktree(dir, null, "status");
             Assert.Equal(0, status.ExitCode);
             Assert.Contains("Sessions : 0", status.StdOut);
+            Assert.Contains("Prompts : 0", status.StdOut);
+            Assert.DoesNotContain("Events :", status.StdOut);
+            Assert.DoesNotContain("Projections :", status.StdOut);
             Assert.Contains("Project ID", status.StdOut);
         }
         finally
@@ -429,6 +432,9 @@ public class CliIntegrationTests
             var status = RunWorktree(dir, null, "status");
             Assert.Equal(0, status.ExitCode);
             Assert.Contains("Sessions : 1", status.StdOut);
+            Assert.Contains("Prompts :", status.StdOut);
+            Assert.DoesNotContain("Events :", status.StdOut);
+            Assert.DoesNotContain("Projections :", status.StdOut);
             Assert.Contains("running", status.StdOut);
         }
         finally

@@ -6,7 +6,6 @@ public sealed class ProjectDto
 {
     public required string ProjectId { get; init; }
     public required string Root { get; init; }
-    public required long NodeCount { get; init; }
     public required long SessionCount { get; init; }
 }
 
@@ -182,8 +181,7 @@ public sealed class StatusDto
     public required string DaemonStatus { get; init; }
     public required bool DaemonRunning { get; init; }
     public required long SessionCount { get; init; }
-    public required long EventCount { get; init; }
-    public required long NodeCount { get; init; }
+    public required long PromptCount { get; init; }
 }
 
 public sealed class SessionDto

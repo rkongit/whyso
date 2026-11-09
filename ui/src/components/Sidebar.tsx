@@ -50,7 +50,7 @@ export function Sidebar() {
         {status ? (
           <>
             <div className="mono">{status.sessionCount} sessions</div>
-            <div className="mono">{status.eventCount} events</div>
+            <div className="mono">{status.promptCount} prompts</div>
           </>
         ) : (
           <div>Loading…</div>

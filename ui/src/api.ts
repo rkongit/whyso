@@ -1,7 +1,6 @@
 export interface ProjectInfo {
   projectId: string
   root: string
-  nodeCount: number
   sessionCount: number
 }
 
@@ -12,8 +11,7 @@ export interface StatusInfo {
   daemonStatus: string
   daemonRunning: boolean
   sessionCount: number
-  eventCount: number
-  nodeCount: number
+  promptCount: number
 }
 
 /** Session list row (enriched projection). Also used for tree nodes. */

@@ -157,8 +157,9 @@ public static class Program
         cmd.SetHandler(async () =>
         {
             var (root, config, store) = await OpenStoreAsync();
-            var sessions = await store.CountSessionsAsync();
-            var events = await store.CountEventsAsync();
+            await EnsureNodesAsync(store);
+            var sessions = await store.CountWorkNodesAsync();
+            var prompts = await store.CountPromptsAsync();
             var healthUrl = $"http://{config.Bind}/v1/health";
             string daemonStatus;
             try
@@ -179,10 +180,8 @@ public static class Program
             Console.WriteLine("Database : .ai-worktree/worktree.db");
             Console.WriteLine($"Bind : {config.Bind}");
             Console.WriteLine($"Daemon : {daemonStatus}");
-            var nodes = await store.CountWorkNodesAsync();
             Console.WriteLine($"Sessions : {sessions}");
-            Console.WriteLine($"Events : {events}");
-            Console.WriteLine($"Projections : {nodes}");
+            Console.WriteLine($"Prompts : {prompts}");
             if (config.Bind != Config.DefaultBind)
             {
                 Console.WriteLine("(non-default bind address)");

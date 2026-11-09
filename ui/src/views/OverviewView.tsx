@@ -56,12 +56,8 @@ export function OverviewView() {
           <div className="value">{status?.sessionCount ?? '—'}</div>
         </div>
         <div className="stat">
-          <div className="label">Events</div>
-          <div className="value">{status?.eventCount ?? '—'}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Projections</div>
-          <div className="value">{status?.nodeCount ?? '—'}</div>
+          <div className="label">Prompts</div>
+          <div className="value">{status?.promptCount ?? '—'}</div>
         </div>
       </div>
 

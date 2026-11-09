@@ -317,6 +317,22 @@ public sealed partial class Store : IDisposable
         }
     }
 
+    public async Task<long> CountPromptsAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM events WHERE event_type = $type";
+            cmd.Parameters.AddWithValue("$type", EventType.PromptSubmitted.AsString());
+            return (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<IReadOnlyList<SessionCommitRecord>> ListSessionCommitsAsync(string sessionId)
     {
         await _gate.WaitAsync();

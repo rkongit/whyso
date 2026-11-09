@@ -110,6 +110,35 @@ public class StorageTests
     }
 
     [Fact]
+    public async Task Count_prompts_counts_only_prompt_submitted()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "wt-" + Guid.NewGuid().ToString("N"));
+        InitGitRepo(dir);
+        try
+        {
+            var (root, cfg) = await Store.InitProjectAsync(dir);
+            await using var store = await Store.OpenAsync(root);
+            Assert.Equal(0, await store.CountPromptsAsync());
+
+            await store.AppendEventAsync(SampleEvent("sess_p", EventType.SessionStarted), cfg.ProjectId);
+            var p1 = SampleEvent("sess_p", EventType.PromptSubmitted);
+            p1.Payload = JsonNode.Parse("""{"prompt":"one"}""")!;
+            await store.AppendEventAsync(p1, cfg.ProjectId);
+            await store.AppendEventAsync(SampleEvent("sess_p", EventType.FileModified), cfg.ProjectId);
+            var p2 = SampleEvent("sess_p", EventType.PromptSubmitted);
+            p2.Payload = JsonNode.Parse("""{"prompt":"two"}""")!;
+            await store.AppendEventAsync(p2, cfg.ProjectId);
+
+            Assert.Equal(2, await store.CountPromptsAsync());
+            Assert.Equal(4, await store.CountEventsAsync());
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { /* ignore */ }
+        }
+    }
+
+    [Fact]
     public async Task Duplicate_event_id_is_idempotent()
     {
         var dir = Path.Combine(Path.GetTempPath(), "wt-" + Guid.NewGuid().ToString("N"));
