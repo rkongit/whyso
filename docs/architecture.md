@@ -1,4 +1,4 @@
-# Whyso Architecture (Phase 1+)
+# Whyso Architecture
 
 ## Goal
 
@@ -10,7 +10,7 @@ dumb; reconstruction is read-side only and uses no LLM.
 ## Layering
 
 ```text
-Agent integrations (Cursor, later others)
+Agent integrations (Cursor, Claude Code)
               ↓
     Normalized Event Protocol
               ↓
@@ -23,7 +23,7 @@ Agent integrations (Cursor, later others)
 ```
 
 **Rule:** Core projects (`Whyso.Events`, `Whyso.Storage`, `Whyso.Daemon`,
-`Whyso.Activities`) must not contain Cursor-specific logic. Vendor adapters
+`Whyso.Activities`) must not contain vendor-specific (Cursor, Claude Code) logic. Vendor adapters
 translate into the normalized protocol only.
 
 ## Projects
@@ -31,10 +31,11 @@ translate into the normalized protocol only.
 | Project | Responsibility |
 | --- | --- |
 | `Whyso.Events` | Envelope types, event type enum, validation, read-side `Normalize` |
-| `Whyso.Storage` | Project init, SQLite schema/migrations, JSONL log |
+| `Whyso.Storage` | Project init, SQLite schema/migrations, JSONL log, redaction, payload encryption, git notes |
 | `Whyso.Daemon` | Localhost HTTP collector (`POST /v1/events`) |
 | `Whyso.Activities` | Session timelines, paired activities, open-ended provenance |
 | `Whyso.Adapter.Cursor` | Cursor hooks → `AgentEvent` |
+| `Whyso.Adapter.ClaudeCode` | Claude Code hooks → `AgentEvent`s; settings merge; SessionStart context |
 | `Whyso.Ui` | Localhost explorer API + static SPA (`whyso ui`); explore + mutate |
 | `Whyso.Cli` | `whyso` binary (`init`, `daemon`, `activity`, `why`, `ui`, …) |
 
@@ -126,6 +127,7 @@ The daemon ignores any inbound `sequence` and assigns its own.
 .whyso/
 ├── config.toml
 ├── worktree.db
+├── keys/<session_id>.key
 └── events/
     └── YYYY/MM/DD/<session_id>.jsonl
 ```
@@ -134,34 +136,93 @@ The daemon ignores any inbound `sequence` and assigns its own.
 - **SQLite** is an indexed, queryable projection of the same stream.
 - Storage is append-only. Historical events are never rewritten.
 - Duplicate `event_id` values are idempotent (no second sequence / JSONL line).
+- Before the rename the directory was `.ai-worktree/`. `Store.OpenAsync` /
+  `InitProjectAsync` move it to `.whyso/`; if the move fails (a file is held
+  open), the legacy directory keeps being used and a warning is printed.
 
 Write path:
 
 ```text
+redact payload strings          (Redactor, pattern + entropy rules)
+  → encrypt with session key    (PayloadCrypto, AES-256-GCM, AAD = event_id + session_id)
 BEGIN
   → compute next sequence
-  → append JSONL line
-  → insert SQLite row
+  → append JSONL line           (payload = {"$enc": {v, n, c, t}})
+  → insert SQLite row           (same ciphertext)
 COMMIT
 ```
 
-## Cursor integration
+Read path: `Store.ReadEvent` decrypts transparently. A missing key (forgotten
+session) or a payload that fails authentication yields
+`{"unreadable": "<reason>"}` instead of an error.
 
-Cursor runs project hooks from `.cursor/hooks.json`. Each configured hook
-invokes:
+## Privacy: redaction and crypto-shredding
 
-```bash
-whyso hook cursor
-```
+- Redaction runs in `Store.AppendEventAsync`, the single ingest choke point, so
+  every adapter gets it. Only string values change; keys, numbers, session ids
+  and commit SHAs are preserved so provenance keeps working.
+- Each session has a random 256-bit key. `whyso forget <session>` deletes it,
+  rebuilds that session's Work Node projection (which then has no prompt text),
+  and truncates the SQLite WAL. `secure_delete` is on, so replaced projection
+  rows are zeroed rather than left in free pages.
+- Work Node projections and FTS hold **redacted plaintext** so search works.
+  This is a deliberate trade-off: raw payloads are only readable with the key.
+- Keys sit next to the data. This protects against leaks of the log or
+  database alone (sharing, backups, sync) and enables erasure; it is not a
+  defense against someone with full access to `.whyso/`. Wrapping keys with an
+  OS keychain or a team KMS is future work.
+- Events written before encryption landed stay plaintext; nothing re-encrypts them.
 
-The adapter:
+## Agent integrations
 
-1. Reads the Cursor JSON payload from stdin
-2. Maps it to a normalized `AgentEvent`
-3. `POST`s it to the local daemon
-4. Prints `{}` and exits successfully (fail-open)
+Both adapters are fail-open: any error is logged to `.whyso/hooks.log` and the
+hook exits 0. Hooks find their project from the payload (`workspace_roots` for
+Cursor, `cwd` for Claude Code) or the process directory, walking up to the
+nearest initialized project. Shared plumbing lives in `Whyso.Events.HookSupport`.
 
-If the daemon is down, the coding agent continues uninterrupted.
+### Cursor
+
+Cursor runs project hooks from `.cursor/hooks.json`, each invoking
+`whyso hook cursor`. The adapter reads the JSON payload from stdin, maps it to
+one `AgentEvent`, `POST`s it to the daemon, and prints `{}`.
+
+### Claude Code
+
+`whyso integrate claude-code` merges hooks into `.claude/settings.json`
+(idempotent; replaces earlier whyso/worktree entries, keeps other hooks). Each
+invokes `whyso hook claude-code`. One hook can produce several events:
+
+| Hook | Events |
+| --- | --- |
+| `SessionStart` | `session.started` (stdout: context brief as `additionalContext`) |
+| `SessionEnd` | `session.ended` |
+| `UserPromptSubmit` | `prompt.submitted` |
+| `PreToolUse` | `tool.started` (+ `command.started` for Bash) |
+| `PostToolUse` | `tool.completed` (+ `command.completed` for Bash, `file.modified` for Edit/MultiEdit/Write/NotebookEdit) |
+| `PostToolUseFailure` | `error` |
+| `Stop` | `agent.response` (`last_assistant_message`) |
+
+Bash `command.completed` events carry the command, so `git commit` attribution
+works exactly as with Cursor. Claude Code payloads have no line ranges, so
+`why file --lines` degrades to file level for these sessions.
+
+## Context brief
+
+`ContextBrief` (Activities) scans recent sessions, splits prompts and agent
+responses into sentences, and keeps those matching rejection phrases ("don't",
+"instead of", "revert", …) or decision phrases ("decided", "going with", …),
+plus files and commits. It is heuristic, local and LLM-free, capped in size,
+and skips sessions with no readable payloads. `whyso context` prints it; the
+Claude Code `SessionStart` hook injects it unless `context_on_session_start`
+is false.
+
+## Git notes provenance (opt-in)
+
+With `git_notes = true`, `Store.RecordSessionCommitShasAsync` writes a JSON note
+under `refs/notes/whyso` for every newly attributed commit, listing all linked
+sessions (`session_id`, `prompt_event_id`, `agent`, `started_at`). Notes never
+contain prompt text because they can be pushed. `why commit` reads the note when
+there is no local capture. `whyso notes write` backfills existing links.
 
 ## Hot-path constraints
 
@@ -172,15 +233,17 @@ The collector must stay fast and dumb:
 - no feature / decision / plan inference
 
 ```text
-receive → validate → persist → acknowledge
+receive → validate → redact → encrypt → persist → acknowledge
 ```
 
-Activity reconstruction runs on read (`activity` / `node` / `why`) and when
-projecting Work Nodes (session end / `rebuild`), never on every ingest event.
+Activity reconstruction runs on read (`activity` / `node` / `why` / `context`)
+and when projecting Work Nodes (session end / `rebuild`), never on every ingest
+event. Git notes are written only when commits are attributed, and only when
+enabled.
 
 ## Out of scope (later phases)
 
-Cloud sync, auth, MCP, replay, embeddings, LLM summaries, automatic
-Git commits, Claude Code / Codex adapters, git-blame line ownership.
-Setup / process control from the UI (`init`, `daemon` start/stop,
-`integrate`) — those remain CLI-only.
+Cloud sync, team server, auth, MCP, replay, embeddings, LLM summaries,
+automatic Git commits or commit trailers, Codex adapter, git-blame line
+ownership, a GitHub Action for per-PR provenance. Setup / process control from
+the UI (`init`, `daemon` start/stop, `integrate`) remains CLI-only.
