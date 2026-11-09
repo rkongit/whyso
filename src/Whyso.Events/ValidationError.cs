@@ -30,6 +30,14 @@ public abstract class ValidationError : Exception
         }
     }
 
+    public sealed class InvalidVisibility : ValidationError
+    {
+        public InvalidVisibility(string value)
+            : base($"visibility must be one of {string.Join(", ", Protocol.Visibilities)} (got '{value}')")
+        {
+        }
+    }
+
     public sealed class InvalidAgent : ValidationError
     {
         public InvalidAgent() : base("agent must be a non-empty string") { }

@@ -2,7 +2,17 @@ namespace Whyso.Events;
 
 public static class Protocol
 {
-    public const string Version = "1.0";
+    /// <summary>Version written by this build. v1.1 adds optional actor, org_id, project_id and visibility.</summary>
+    public const string Version = "1.1";
+
+    /// <summary>Versions accepted on ingest.</summary>
+    public static readonly IReadOnlySet<string> SupportedVersions = new HashSet<string> { "1.0", "1.1" };
+
+    public const string VisibilityPrivate = "private";
+    public const string VisibilityTeam = "team";
+    public const string VisibilityAudit = "audit";
+
+    public static readonly IReadOnlyList<string> Visibilities = [VisibilityPrivate, VisibilityTeam, VisibilityAudit];
     public const string EventIdPrefix = "evt_";
     public const string SessionIdPrefix = "sess_";
 
@@ -22,7 +32,7 @@ public static class Protocol
 
     public static void ValidateEnvelope(AgentEvent event_)
     {
-        if (event_.Version != Version)
+        if (!SupportedVersions.Contains(event_.Version))
         {
             throw new ValidationError.UnsupportedVersion(event_.Version);
         }
@@ -40,6 +50,11 @@ public static class Protocol
         if (string.IsNullOrWhiteSpace(event_.Agent))
         {
             throw new ValidationError.InvalidAgent();
+        }
+
+        if (event_.Visibility is not null && !Visibilities.Contains(event_.Visibility))
+        {
+            throw new ValidationError.InvalidVisibility(event_.Visibility);
         }
 
         var maxFuture = DateTimeOffset.UtcNow.AddHours(24);

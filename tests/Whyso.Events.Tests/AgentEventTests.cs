@@ -24,7 +24,7 @@ public class AgentEventTests
         var event_ = SampleEvent();
         using var doc = JsonDocument.Parse(event_.ToJson());
         var root = doc.RootElement;
-        Assert.Equal("1.0", root.GetProperty("version").GetString());
+        Assert.Equal(Protocol.Version, root.GetProperty("version").GetString());
         Assert.Equal("evt_123", root.GetProperty("event_id").GetString());
         Assert.Equal("sess_123", root.GetProperty("session_id").GetString());
         Assert.Equal(17UL, root.GetProperty("sequence").GetUInt64());

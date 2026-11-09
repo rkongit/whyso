@@ -121,6 +121,17 @@ Every event has:
 
 The daemon ignores any inbound `sequence` and assigns its own.
 
+Envelope **v1.1** (`schemas/event-v1.1.json`) adds optional team-readiness fields;
+v1.0 events are still accepted:
+
+- `actor` (`user`, hashed `machine_id`), `project_id`: filled by the daemon when absent.
+- `org_id`: reserved for a future team collector.
+- `visibility`: `private` (default), `team` or `audit`. Stored now, not yet enforced.
+
+The daemon writes through an `IEventSink` (`Whyso.Daemon/EventSinks.cs`).
+`LocalStoreSink` is the only one wired up; `HttpRemoteSink` (redacts before
+sending) is the seam for a self-hosted collector.
+
 ## Persistence model
 
 ```text

@@ -35,6 +35,26 @@ public sealed class AgentEvent
     [JsonPropertyName("payload")]
     public JsonNode Payload { get; set; } = new JsonObject();
 
+    // v1.1 optional fields (team readiness). All omitted from JSON when null.
+
+    /// <summary>Who produced the event: OS user and a stable, hashed machine id.</summary>
+    [JsonPropertyName("actor")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EventActor? Actor { get; set; }
+
+    [JsonPropertyName("org_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OrgId { get; set; }
+
+    [JsonPropertyName("project_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ProjectId { get; set; }
+
+    /// <summary><c>private</c> (default), <c>team</c> or <c>audit</c>; see <see cref="Protocol.Visibilities"/>.</summary>
+    [JsonPropertyName("visibility")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Visibility { get; set; }
+
     public static AgentEvent New(string sessionId, string agent, EventType eventType, JsonNode payload) =>
         new()
         {
@@ -55,6 +75,27 @@ public sealed class AgentEvent
     public static AgentEvent FromJson(string json) =>
         JsonSerializer.Deserialize<AgentEvent>(json, EventJson.Options)
         ?? throw new JsonException("failed to deserialize AgentEvent");
+}
+
+public sealed class EventActor
+{
+    [JsonPropertyName("user")]
+    public string User { get; set; } = "";
+
+    [JsonPropertyName("machine_id")]
+    public string MachineId { get; set; } = "";
+
+    /// <summary>The current OS user and a SHA-256-derived id of this machine (the hostname is not stored).</summary>
+    public static EventActor Local()
+    {
+        var hash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Environment.MachineName.ToLowerInvariant()));
+        return new EventActor
+        {
+            User = Environment.UserName,
+            MachineId = "mach_" + Convert.ToHexString(hash, 0, 8).ToLowerInvariant(),
+        };
+    }
 }
 
 public static class EventJson

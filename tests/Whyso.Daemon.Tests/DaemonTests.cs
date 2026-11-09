@@ -139,6 +139,39 @@ public class DaemonTests
     }
 
     [Fact]
+    public async Task V1_0_event_gets_v1_1_defaults_and_they_round_trip()
+    {
+        var (client, root, _, host) = await SetupAsync();
+        await using var _ = host;
+        var body = JsonNode.Parse(EventJsonBody())!.AsObject();
+        body["version"] = "1.0";
+        var response = await client.PostAsync(
+            "/v1/events",
+            new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        await using var store = await Store.OpenAsync(root);
+        var stored = (await store.ListEventsAsync("sess_daemon_test")).Single();
+        Assert.Equal(Protocol.VisibilityPrivate, stored.Visibility);
+        Assert.NotNull(stored.Actor);
+        Assert.StartsWith("mach_", stored.Actor!.MachineId);
+        Assert.False(string.IsNullOrEmpty(stored.ProjectId));
+    }
+
+    [Fact]
+    public async Task Unknown_visibility_returns_400()
+    {
+        var (client, _, _, host) = await SetupAsync();
+        await using var _ = host;
+        var body = JsonNode.Parse(EventJsonBody())!.AsObject();
+        body["visibility"] = "public";
+        var response = await client.PostAsync(
+            "/v1/events",
+            new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Invalid_payload_returns_400()
     {
         var (client, _, _, host) = await SetupAsync();

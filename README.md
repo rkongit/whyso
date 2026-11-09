@@ -153,14 +153,17 @@ encrypted `{"$enc": …}` object; readers see the redacted, vendor-shaped payloa
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.1",
   "event_id": "evt_…",
   "session_id": "sess_…",
   "sequence": 3,
   "timestamp": "2026-08-10T15:30:00Z",
   "agent": "claude-code",
   "event_type": "file.modified",
-  "payload": { "path": "src/auth/AuthService.java" }
+  "payload": { "path": "src/auth/AuthService.java" },
+  "actor": { "user": "ada", "machine_id": "mach_3f9c…" },
+  "project_id": "proj_…",
+  "visibility": "private"
 }
 ```
 

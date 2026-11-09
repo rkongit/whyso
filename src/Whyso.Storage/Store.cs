@@ -269,7 +269,8 @@ public sealed partial class Store : IDisposable
             await using var cmd = _connection.CreateCommand();
             cmd.CommandText =
                 """
-                SELECT id, session_id, sequence, event_type, timestamp, agent, payload
+                SELECT id, session_id, sequence, event_type, timestamp, agent, payload,
+                       actor, org_id, envelope_project_id, visibility
                 FROM events
                 WHERE session_id = $sid
                 ORDER BY sequence ASC
@@ -653,8 +654,10 @@ public sealed partial class Store : IDisposable
                 cmd.Transaction = tx;
                 cmd.CommandText =
                     """
-                    INSERT INTO events (id, session_id, sequence, event_type, timestamp, agent, payload)
-                    VALUES ($id, $sid, $seq, $type, $ts, $agent, $payload)
+                    INSERT INTO events (id, session_id, sequence, event_type, timestamp, agent, payload,
+                        actor, org_id, envelope_project_id, visibility)
+                    VALUES ($id, $sid, $seq, $type, $ts, $agent, $payload,
+                        $actor, $org, $eproj, $vis)
                     """;
                 cmd.Parameters.AddWithValue("$id", event_.EventId);
                 cmd.Parameters.AddWithValue("$sid", event_.SessionId);
@@ -663,6 +666,12 @@ public sealed partial class Store : IDisposable
                 cmd.Parameters.AddWithValue("$ts", event_.Timestamp.ToUniversalTime().ToString("O"));
                 cmd.Parameters.AddWithValue("$agent", event_.Agent);
                 cmd.Parameters.AddWithValue("$payload", sealedPayload.ToJsonString());
+                cmd.Parameters.AddWithValue(
+                    "$actor",
+                    event_.Actor is null ? DBNull.Value : System.Text.Json.JsonSerializer.Serialize(event_.Actor));
+                cmd.Parameters.AddWithValue("$org", (object?)event_.OrgId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$eproj", (object?)event_.ProjectId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$vis", (object?)event_.Visibility ?? DBNull.Value);
                 await cmd.ExecuteNonQueryAsync();
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
@@ -792,7 +801,8 @@ public sealed partial class Store : IDisposable
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText =
             """
-            SELECT id, session_id, sequence, event_type, timestamp, agent, payload
+            SELECT id, session_id, sequence, event_type, timestamp, agent, payload,
+                       actor, org_id, envelope_project_id, visibility
             FROM events
             WHERE id = $id
             """;
@@ -877,6 +887,10 @@ public sealed partial class Store : IDisposable
         Agent = source.Agent,
         EventType = source.EventType,
         Payload = payload,
+        Actor = source.Actor,
+        OrgId = source.OrgId,
+        ProjectId = source.ProjectId,
+        Visibility = source.Visibility,
     };
 
     /// <summary>Deletes the session's encryption key (crypto-shredding). Returns false if none existed.</summary>
@@ -922,6 +936,13 @@ public sealed partial class Store : IDisposable
             Agent = reader.GetString(5),
             EventType = eventType,
             Payload = payload,
+            Actor = reader.IsDBNull(7)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<EventActor>(reader.GetString(7)),
+            OrgId = reader.IsDBNull(8) ? null : reader.GetString(8),
+            ProjectId = reader.IsDBNull(9) ? null : reader.GetString(9),
+            // Events from v1.0 clients have no visibility; treat them as private.
+            Visibility = reader.IsDBNull(10) ? Protocol.VisibilityPrivate : reader.GetString(10),
         };
     }
 

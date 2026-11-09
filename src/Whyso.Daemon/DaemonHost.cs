@@ -15,6 +15,18 @@ public sealed class AppState
 {
     public required Store Store { get; init; }
     public required Config Config { get; init; }
+
+    private IEventSink? _sink;
+
+    /// <summary>Where validated events go. Defaults to the local store.</summary>
+    public IEventSink Sink
+    {
+        get => _sink ??= new LocalStoreSink(Store, Config.ProjectId);
+        init => _sink = value;
+    }
+
+    /// <summary>Actor stamped on events that arrive without one (v1.1 envelope).</summary>
+    public EventActor LocalActor { get; init; } = EventActor.Local();
 }
 
 public static class DaemonHost
@@ -62,9 +74,14 @@ public static class DaemonHost
                     statusCode: StatusCodes.Status400BadRequest);
             }
 
+            // v1.1 defaults: who produced it, which project, and private unless the client says otherwise.
+            event_.Actor ??= s.LocalActor;
+            event_.ProjectId ??= s.Config.ProjectId;
+            event_.Visibility ??= Protocol.VisibilityPrivate;
+
             try
             {
-                var outcome = await s.Store.AppendEventAsync(event_, s.Config.ProjectId);
+                var outcome = await s.Sink.AppendAsync(event_);
                 if (outcome is AppendOutcome.Inserted
                     && event_.EventType == EventType.SessionEnded)
                 {
