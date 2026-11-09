@@ -47,6 +47,7 @@ public static class Program
         root.AddCommand(BuildLink());
         root.AddCommand(BuildUnlink());
         root.AddCommand(BuildLabel());
+        root.AddCommand(BuildForget());
         root.AddCommand(BuildSearch());
         root.AddCommand(BuildRebuild());
         root.AddCommand(BuildWhy());
@@ -424,6 +425,46 @@ public static class Program
             await store.DeleteEdgeAsync(from, to, kind);
             Console.WriteLine($"Removed edge {from} -[{kind}]-> {to}");
         }, fromArg, toArg, kindOpt);
+        return cmd;
+    }
+
+    private static Command BuildForget()
+    {
+        var idArg = new Argument<string>("session-id", "Session id (sess_...)");
+        var yesOpt = new Option<bool>("--yes", "Skip the confirmation prompt");
+        var cmd = new Command(
+            "forget",
+            "Crypto-shred a session: delete its encryption key so stored prompts and payloads become unreadable")
+        {
+            idArg,
+            yesOpt,
+        };
+        cmd.SetHandler(async (string id, bool yes) =>
+        {
+            var (_, _, store) = await OpenStoreAsync();
+            if (await store.GetSessionAsync(id) is null)
+            {
+                throw new InvalidOperationException($"session not found: {id}");
+            }
+
+            if (!yes)
+            {
+                Console.Write(
+                    $"Delete the encryption key for {id}? Its prompts and tool payloads become unreadable and this cannot be undone. Type 'yes' to continue: ");
+                if (Console.ReadLine()?.Trim() != "yes")
+                {
+                    Console.WriteLine("Aborted.");
+                    return;
+                }
+            }
+
+            var deleted = store.ForgetSessionKey(id);
+            // Rebuild the session's projection so search and summaries drop prompt text.
+            await WorkNodeIndex.ProjectSessionByIdAsync(store, id);
+            Console.WriteLine(deleted
+                ? $"Forgot {id}: encryption key deleted; projections rebuilt."
+                : $"{id} had no encryption key (nothing to forget).");
+        }, idArg, yesOpt);
         return cmd;
     }
 

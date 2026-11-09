@@ -81,8 +81,8 @@ public static class CursorAdapter
         }
         catch (Exception ex)
         {
-            var preview = stdin.Length <= 80 ? stdin : stdin[..80];
-            AppendHookLog(logPath, $"invalid stdin JSON: {ex.Message} (bytes={stdin.Length}, preview={preview})");
+            // No payload preview: stdin may contain prompts or secrets, and the log is plaintext.
+            AppendHookLog(logPath, $"invalid stdin JSON: {ex.Message} (bytes={stdin.Length})");
             return new JsonObject();
         }
 

@@ -537,6 +537,13 @@ public sealed partial class Store : IDisposable
         var needGit = event_.EventType == EventType.SessionEnded || sessionMissing;
         var gitHead = needGit ? Git.DetectGitHead(_root) : null;
 
+        // Redact secrets, then encrypt with the session key. Raw values never reach JSONL or SQLite.
+        var sealedPayload = PayloadCrypto.Encrypt(
+            PayloadCrypto.GetOrCreateKey(_root, event_.SessionId),
+            event_.EventId,
+            event_.SessionId,
+            Redactor.RedactNode(event_.Payload) ?? new JsonObject());
+
         await _gate.WaitAsync();
         try
         {
@@ -575,7 +582,7 @@ public sealed partial class Store : IDisposable
             var jsonlPath = Jsonl.PathFor(_root, event_.SessionId, event_.Timestamp);
             try
             {
-                Jsonl.AppendLine(jsonlPath, event_);
+                Jsonl.AppendLine(jsonlPath, WithPayload(event_, sealedPayload));
             }
             catch (Exception ex)
             {
@@ -598,7 +605,7 @@ public sealed partial class Store : IDisposable
                 cmd.Parameters.AddWithValue("$type", event_.EventType.AsString());
                 cmd.Parameters.AddWithValue("$ts", event_.Timestamp.ToUniversalTime().ToString("O"));
                 cmd.Parameters.AddWithValue("$agent", event_.Agent);
-                cmd.Parameters.AddWithValue("$payload", event_.Payload.ToJsonString());
+                cmd.Parameters.AddWithValue("$payload", sealedPayload.ToJsonString());
                 await cmd.ExecuteNonQueryAsync();
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
@@ -776,12 +783,59 @@ public sealed partial class Store : IDisposable
         GitHeadAfter = reader.IsDBNull(6) ? null : reader.GetString(6),
     };
 
-    private static AgentEvent ReadEvent(SqliteDataReader reader)
+    /// <summary>
+    /// Returns the event with its payload decrypted. If the session key was deleted (forgotten)
+    /// or the ciphertext is damaged, readers get a placeholder instead of an error.
+    /// </summary>
+    private JsonNode OpenPayload(string eventId, string sessionId, JsonNode stored)
+    {
+        if (!PayloadCrypto.IsEncrypted(stored))
+        {
+            return stored;
+        }
+
+        var key = PayloadCrypto.TryGetKey(_root, sessionId);
+        if (key is null)
+        {
+            return PayloadCrypto.Placeholder("session key deleted");
+        }
+
+        try
+        {
+            return PayloadCrypto.Decrypt(key, eventId, sessionId, stored);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            return PayloadCrypto.Placeholder("payload failed authentication");
+        }
+    }
+
+    private static AgentEvent WithPayload(AgentEvent source, JsonNode payload) => new()
+    {
+        Version = source.Version,
+        EventId = source.EventId,
+        SessionId = source.SessionId,
+        Sequence = source.Sequence,
+        Timestamp = source.Timestamp,
+        Agent = source.Agent,
+        EventType = source.EventType,
+        Payload = payload,
+    };
+
+    /// <summary>Deletes the session's encryption key (crypto-shredding). Returns false if none existed.</summary>
+    public bool ForgetSessionKey(string sessionId) => PayloadCrypto.DeleteKey(_root, sessionId);
+
+    private AgentEvent ReadEvent(SqliteDataReader reader)
     {
         var typeStr = reader.GetString(3);
         var eventType = EventTypeExtensions.Parse(typeStr)
             ?? throw new StorageException($"unknown event_type in database: {typeStr}");
-        var payload = JsonNode.Parse(reader.GetString(6)) ?? new JsonObject();
+        var eventId = reader.GetString(0);
+        var sessionId = reader.GetString(1);
+        var payload = OpenPayload(
+            eventId,
+            sessionId,
+            JsonNode.Parse(reader.GetString(6)) ?? new JsonObject());
         return new AgentEvent
         {
             Version = Protocol.Version,
