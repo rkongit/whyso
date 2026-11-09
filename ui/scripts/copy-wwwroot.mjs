@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = join(here, '..', 'dist')
-const wwwroot = join(here, '..', '..', 'src', 'Worktree.Ui', 'wwwroot')
+const wwwroot = join(here, '..', '..', 'src', 'Whyso.Ui', 'wwwroot')
 
 if (!existsSync(dist)) {
   console.error('ui/dist missing — vite build failed?')

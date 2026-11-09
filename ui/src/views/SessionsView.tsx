@@ -123,7 +123,7 @@ export function SessionsView() {
             <button type="button" className="btn primary" style={{ width: '100%' }} onClick={applyFilters}>
               Apply filters
             </button>
-            <div className="cli-hint">worktree sessions</div>
+            <div className="cli-hint">whyso sessions</div>
           </div>
           {listError && <div className="error-banner">{listError}</div>}
           {fileTouches ? (
@@ -169,7 +169,7 @@ export function SessionsView() {
             <div className="empty">
               No sessions
               <br />
-              <code>worktree rebuild</code>
+              <code>whyso rebuild</code>
             </div>
           )}
         </div>
@@ -180,7 +180,7 @@ export function SessionsView() {
             <div className="empty">
               Select a session
               <br />
-              <code>worktree session &lt;id&gt;</code>
+              <code>whyso session &lt;id&gt;</code>
             </div>
           )}
         </div>
@@ -303,7 +303,7 @@ export function SessionDetailView({
           />
         </div>
         <div className="cli-hint">
-          worktree session {sessionId} · worktree activity {sessionId} · worktree events {sessionId}
+          whyso session {sessionId} · whyso activity {sessionId} · whyso events {sessionId}
         </div>
       </div>
 

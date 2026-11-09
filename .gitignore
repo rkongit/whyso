@@ -5,7 +5,7 @@ publish/
 **/[Oo]bj/
 .DS_Store
 Thumbs.db
-.ai-worktree/
+.whyso/
 .idea/
 .vscode/
 *.user
@@ -13,3 +13,4 @@ Thumbs.db
 *.swp
 *.swo
 .cursor/
+.ai-worktree/

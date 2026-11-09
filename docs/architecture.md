@@ -1,4 +1,4 @@
-# Worktree Architecture (Phase 1+)
+# Whyso Architecture (Phase 1+)
 
 ## Goal
 
@@ -14,7 +14,7 @@ Agent integrations (Cursor, later others)
               ↓
     Normalized Event Protocol
               ↓
-         Worktree Daemon
+         Whyso Daemon
               ↓
       SQLite  +  Immutable JSONL
               ↓ (read-side)
@@ -22,21 +22,21 @@ Agent integrations (Cursor, later others)
                                          ↘ Provenance / History / Search
 ```
 
-**Rule:** Core projects (`Worktree.Events`, `Worktree.Storage`, `Worktree.Daemon`,
-`Worktree.Activities`) must not contain Cursor-specific logic. Vendor adapters
+**Rule:** Core projects (`Whyso.Events`, `Whyso.Storage`, `Whyso.Daemon`,
+`Whyso.Activities`) must not contain Cursor-specific logic. Vendor adapters
 translate into the normalized protocol only.
 
 ## Projects
 
 | Project | Responsibility |
 | --- | --- |
-| `Worktree.Events` | Envelope types, event type enum, validation, read-side `Normalize` |
-| `Worktree.Storage` | Project init, SQLite schema/migrations, JSONL log |
-| `Worktree.Daemon` | Localhost HTTP collector (`POST /v1/events`) |
-| `Worktree.Activities` | Session timelines, paired activities, open-ended provenance |
-| `Worktree.Adapter.Cursor` | Cursor hooks → `AgentEvent` |
-| `Worktree.Ui` | Localhost explorer API + static SPA (`worktree ui`); explore + mutate |
-| `Worktree.Cli` | `worktree` binary (`init`, `daemon`, `activity`, `why`, `ui`, …) |
+| `Whyso.Events` | Envelope types, event type enum, validation, read-side `Normalize` |
+| `Whyso.Storage` | Project init, SQLite schema/migrations, JSONL log |
+| `Whyso.Daemon` | Localhost HTTP collector (`POST /v1/events`) |
+| `Whyso.Activities` | Session timelines, paired activities, open-ended provenance |
+| `Whyso.Adapter.Cursor` | Cursor hooks → `AgentEvent` |
+| `Whyso.Ui` | Localhost explorer API + static SPA (`whyso ui`); explore + mutate |
+| `Whyso.Cli` | `whyso` binary (`init`, `daemon`, `activity`, `why`, `ui`, …) |
 
 Sessions store `git_head` (HEAD at session start) and `git_head_after` (HEAD at
 session end) so each session can be linked to a commit range. Capture uses a
@@ -56,12 +56,12 @@ two short chats). Triggers: successful `git commit` command events, session
 end, and when a new session starts (`git log base..HEAD` for every session
 whose start HEAD is an ancestor of current HEAD).
 
-`Worktree.Events.Normalize` derives typed read models (Prompt, ToolCall,
+`Whyso.Events.Normalize` derives typed read models (Prompt, ToolCall,
 FileChange, …) from stored raw events without rewriting JSONL.
 
 ## Activity reconstruction and provenance
 
-`Worktree.Activities` builds a hierarchical **session timeline** of
+`Whyso.Activities` builds a hierarchical **session timeline** of
 **prompt turns**: each `prompt.submitted` starts a turn; related tools,
 commands, file changes, tests, git ops, and `agent.response` text are
 correlated (start/complete paired) into that turn. Activity before the first
@@ -72,7 +72,7 @@ plan/narrative; no LLM summarization.
 (`id = session_id`). A node aggregates prompts, activities, files changed,
 commands, tests, agent responses, and Git state. Summaries are projected into
 SQLite (`work_nodes`, `work_node_files`, FTS, …) on session end and via
-`worktree rebuild`. Full detail stays reconstruct-on-read from JSONL/events.
+`whyso rebuild`. Full detail stays reconstruct-on-read from JSONL/events.
 **User-facing CLI/UI use the name “session”** for list/detail; Work Node tables
 remain the projection engine.
 
@@ -91,16 +91,16 @@ remain the projection engine.
 CLI:
 
 ```bash
-worktree activity sess_<id>
-worktree sessions [--file path|--prefix dir]
-worktree session sess_<id>
-worktree tree [--from sess_<id>]
-worktree link <from> <to> [--label feature]
-worktree label sess_<id> feature
-worktree search <query> [--type file] [--from commit:<sha>]
-worktree rebuild
-worktree why commit <sha>
-worktree why file <path> [--lines 10-42]
+whyso activity sess_<id>
+whyso sessions [--file path|--prefix dir]
+whyso session sess_<id>
+whyso tree [--from sess_<id>]
+whyso link <from> <to> [--label feature]
+whyso label sess_<id> feature
+whyso search <query> [--type file] [--from commit:<sha>]
+whyso rebuild
+whyso why commit <sha>
+whyso why file <path> [--lines 10-42]
 ```
 
 JSONL remains the source of truth. Work Node tables are rebuildable projections.
@@ -123,7 +123,7 @@ The daemon ignores any inbound `sequence` and assigns its own.
 ## Persistence model
 
 ```text
-.ai-worktree/
+.whyso/
 ├── config.toml
 ├── worktree.db
 └── events/
@@ -151,7 +151,7 @@ Cursor runs project hooks from `.cursor/hooks.json`. Each configured hook
 invokes:
 
 ```bash
-worktree hook cursor
+whyso hook cursor
 ```
 
 The adapter:

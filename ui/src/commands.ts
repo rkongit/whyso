@@ -26,7 +26,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'nav-overview',
       title: 'Overview',
-      cli: 'worktree status',
+      cli: 'whyso status',
       kind: 'navigate',
       keywords: ['status', 'home'],
       run: (_a, h) => h.navigate('/'),
@@ -34,14 +34,14 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'nav-tree',
       title: 'Work Tree',
-      cli: 'worktree tree',
+      cli: 'whyso tree',
       kind: 'navigate',
       run: (_a, h) => h.navigate('/tree'),
     },
     {
       id: 'nav-sessions',
       title: 'Sessions',
-      cli: 'worktree sessions',
+      cli: 'whyso sessions',
       kind: 'navigate',
       keywords: ['nodes', 'history'],
       run: (_a, h) => h.navigate('/sessions'),
@@ -49,21 +49,21 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'nav-why',
       title: 'Why (provenance)',
-      cli: 'worktree why',
+      cli: 'whyso why',
       kind: 'navigate',
       run: (_a, h) => h.navigate('/why'),
     },
     {
       id: 'nav-search',
       title: 'Search',
-      cli: 'worktree search',
+      cli: 'whyso search',
       kind: 'navigate',
       run: (_a, h) => h.navigate('/search'),
     },
     {
       id: 'query-search',
       title: 'Search query…',
-      cli: 'worktree search <query>',
+      cli: 'whyso search <query>',
       kind: 'query',
       args: [{ name: 'q', placeholder: 'query' }],
       run: (a, h) => h.navigate(`/search?q=${encodeURIComponent(a.q ?? '')}`),
@@ -71,7 +71,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'query-session',
       title: 'Open session…',
-      cli: 'worktree session <id>',
+      cli: 'whyso session <id>',
       kind: 'query',
       args: [{ name: 'id', placeholder: 'sess_…' }],
       run: (a, h) => h.navigate(`/sessions/${encodeURIComponent(a.id ?? '')}`),
@@ -79,7 +79,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'query-sessions-file',
       title: 'Sessions for file…',
-      cli: 'worktree sessions --file <path>',
+      cli: 'whyso sessions --file <path>',
       kind: 'query',
       args: [{ name: 'file', placeholder: 'path/to/file' }],
       run: (a, h) => h.navigate(`/sessions?file=${encodeURIComponent(a.file ?? '')}`),
@@ -87,7 +87,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'query-sessions-prefix',
       title: 'Sessions for prefix…',
-      cli: 'worktree sessions --prefix <dir>',
+      cli: 'whyso sessions --prefix <dir>',
       kind: 'query',
       args: [{ name: 'prefix', placeholder: 'src/' }],
       run: (a, h) => h.navigate(`/sessions?prefix=${encodeURIComponent(a.prefix ?? '')}`),
@@ -95,7 +95,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'query-why-commit',
       title: 'Why commit…',
-      cli: 'worktree why commit <sha>',
+      cli: 'whyso why commit <sha>',
       kind: 'query',
       args: [{ name: 'sha', placeholder: 'commit sha' }],
       run: (a, h) => h.navigate(`/why?mode=commit&sha=${encodeURIComponent(a.sha ?? '')}`),
@@ -103,7 +103,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'query-why-file',
       title: 'Why file…',
-      cli: 'worktree why file <path>',
+      cli: 'whyso why file <path>',
       kind: 'query',
       args: [
         { name: 'path', placeholder: 'path/to/file' },
@@ -118,7 +118,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'query-tree-from',
       title: 'Tree focused on session…',
-      cli: 'worktree tree --from <id>',
+      cli: 'whyso tree --from <id>',
       kind: 'query',
       args: [{ name: 'from', placeholder: 'sess_…' }],
       run: (a, h) => h.navigate(`/tree?from=${encodeURIComponent(a.from ?? '')}`),
@@ -126,7 +126,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'mutate-link',
       title: 'Link sessions…',
-      cli: 'worktree link <from> <to> [--label]',
+      cli: 'whyso link <from> <to> [--label]',
       kind: 'mutate',
       args: [
         { name: 'from', placeholder: 'from sess_…' },
@@ -143,7 +143,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'mutate-unlink',
       title: 'Unlink sessions…',
-      cli: 'worktree unlink <from> <to>',
+      cli: 'whyso unlink <from> <to>',
       kind: 'mutate',
       args: [
         { name: 'from', placeholder: 'from sess_…' },
@@ -160,7 +160,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'mutate-label',
       title: 'Label session…',
-      cli: 'worktree label <id> <label>',
+      cli: 'whyso label <id> <label>',
       kind: 'mutate',
       args: [
         { name: 'id', placeholder: 'sess_…' },
@@ -176,7 +176,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'mutate-unlabel',
       title: 'Remove label…',
-      cli: 'worktree label <id> <label> --remove',
+      cli: 'whyso label <id> <label> --remove',
       kind: 'mutate',
       args: [
         { name: 'id', placeholder: 'sess_…' },
@@ -192,7 +192,7 @@ export function buildCommands(): PaletteCommand[] {
     {
       id: 'mutate-rebuild',
       title: 'Rebuild projections',
-      cli: 'worktree rebuild',
+      cli: 'whyso rebuild',
       kind: 'mutate',
       confirm: 'Rebuild all session projections and auto edges?',
       run: async (_a, h) => {

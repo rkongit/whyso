@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAppData } from '../AppData'
 import { formatDay, shortSha, titleFromExcerpt } from '../format'
-import worktreeIcon from '../assets/worktree-icon.png'
+import worktreeIcon from '../assets/whyso-icon.png'
 
 export function OverviewView() {
   const { status, sessions, refresh, setToast, loading } = useAppData()
@@ -12,10 +12,10 @@ export function OverviewView() {
     <div className="page">
       <div className="page-header">
         <div className="page-brand">
-          <img className="page-icon" src={worktreeIcon} alt="Worktree" width={48} height={48} />
+          <img className="page-icon" src={worktreeIcon} alt="Whyso" width={48} height={48} />
           <div>
             <h1>Overview</h1>
-            <p>Project status and recent sessions — equivalent to <code>worktree status</code>.</p>
+            <p>Project status and recent sessions — equivalent to <code>whyso status</code>.</p>
           </div>
         </div>
         <div className="page-actions">
@@ -71,7 +71,7 @@ export function OverviewView() {
           <div className="dim" style={{ marginTop: 4 }}>
             project id · {status?.projectId ?? '—'}
           </div>
-          <div className="cli-hint">worktree status</div>
+          <div className="cli-hint">whyso status</div>
         </div>
       </div>
 
@@ -84,7 +84,7 @@ export function OverviewView() {
           <div className="empty">
             No sessions yet.
             <br />
-            <code>worktree rebuild</code>
+            <code>whyso rebuild</code>
           </div>
         ) : (
           <div className="table-wrap">
