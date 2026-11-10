@@ -1,34 +1,67 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { api, type FileTouch, type SessionDetail, type SessionInfo } from '../api'
+import {
+  ChevronLeft,
+  CircleAlert,
+  FileText,
+  FlaskConical,
+  GitCommitHorizontal,
+  Inbox,
+  MousePointerClick,
+  Search,
+  Terminal,
+  Wrench,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
+import { api, type Activity, type FileTouch, type SessionDetail, type SessionInfo } from '../api'
 import { useAppData } from '../AppData'
+import { errorMessage } from '../format'
 import {
   basename,
-  formatDay,
+  formatDateTime,
   formatDuration,
+  formatRelativeTime,
   formatTime,
   shortSha,
   titleFromExcerpt,
 } from '../format'
+import { StatusBadge } from '../components/Badge'
+import { CliHint, CopyButton } from '../components/CliHint'
+import { EmptyState } from '../components/EmptyState'
+import { SkeletonRows } from '../components/Skeleton'
+import { Tabs, type TabItem } from '../components/Tabs'
 
-type Tab =
-  | 'summary'
-  | 'activity'
-  | 'files'
-  | 'tests'
-  | 'commands'
-  | 'git'
-  | 'events'
+type Tab = 'summary' | 'activity' | 'files' | 'tests' | 'commands' | 'git' | 'events'
 
 function isFileTouchList(data: SessionInfo[] | FileTouch[]): data is FileTouch[] {
   return data.length > 0 && 'sessionId' in data[0]! && !('id' in data[0]!)
+}
+
+function activityIcon(kind: string): LucideIcon {
+  const k = kind.toLowerCase()
+  if (k.includes('error')) return CircleAlert
+  if (k.includes('command')) return Terminal
+  if (k.includes('file')) return FileText
+  if (k.includes('test')) return FlaskConical
+  if (k.includes('git') || k.includes('commit')) return GitCommitHorizontal
+  return Wrench
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="banner" role="alert">
+      <CircleAlert size={15} />
+      <span>{message}</span>
+    </div>
+  )
 }
 
 export function SessionsView() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const { sessions: appSessions, refresh } = useAppData()
+  const { sessions: appSessions, refresh, loading } = useAppData()
   const file = params.get('file') ?? ''
   const prefix = params.get('prefix') ?? ''
   const [filter, setFilter] = useState('')
@@ -82,10 +115,10 @@ export function SessionsView() {
     )
   }, [list, filter])
 
-  function applyFilters() {
+  function applyFilters(nextFile = fileInput, nextPrefix = prefixInput) {
     const next = new URLSearchParams()
-    if (fileInput.trim()) next.set('file', fileInput.trim())
-    if (prefixInput.trim()) next.set('prefix', prefixInput.trim())
+    if (nextFile.trim()) next.set('file', nextFile.trim())
+    if (nextPrefix.trim()) next.set('prefix', nextPrefix.trim())
     if (id) {
       navigate(`/sessions/${encodeURIComponent(id)}${next.toString() ? `?${next}` : ''}`)
     } else {
@@ -93,95 +126,154 @@ export function SessionsView() {
     }
   }
 
+  const scoped = Boolean(file || prefix)
+  const qs = params.toString() ? `?${params}` : ''
+  const open = (sessionId: string) => navigate(`/sessions/${encodeURIComponent(sessionId)}${qs}`)
+  const cli = `whyso sessions${file ? ` --file ${file}` : ''}${prefix ? ` --prefix ${prefix}` : ''}`
+  const count = fileTouches ? fileTouches.length : filtered.length
+
   return (
     <div className="page full">
-      <div className="split">
+      <div className={`split${id ? ' has-detail' : ''}`}>
         <div className="split-list">
-          <div style={{ padding: 10, borderBottom: '1px solid var(--border)' }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Sessions</div>
-            <input
-              className="inline-input"
-              style={{ width: '100%', marginBottom: 6 }}
-              placeholder="Filter…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-            <input
-              className="inline-input"
-              style={{ width: '100%', marginBottom: 6 }}
-              placeholder="--file path"
-              value={fileInput}
-              onChange={(e) => setFileInput(e.target.value)}
-            />
-            <input
-              className="inline-input"
-              style={{ width: '100%', marginBottom: 6 }}
-              placeholder="--prefix src/"
-              value={prefixInput}
-              onChange={(e) => setPrefixInput(e.target.value)}
-            />
-            <button type="button" className="btn primary" style={{ width: '100%' }} onClick={applyFilters}>
-              Apply filters
-            </button>
-            <div className="cli-hint">whyso sessions</div>
-          </div>
-          {listError && <div className="error-banner">{listError}</div>}
-          {fileTouches ? (
-            fileTouches.map((t, i) => (
-              <button
-                key={`${t.sessionId}-${t.at}-${i}`}
-                type="button"
-                className={`list-item${id === t.sessionId ? ' active' : ''}`}
-                onClick={() => navigate(`/sessions/${encodeURIComponent(t.sessionId)}`)}
-              >
-                <div className="title">{titleFromExcerpt(t.promptExcerpt)}</div>
-                <div className="meta">
-                  {formatDay(t.at)} · {t.action} · {basename(t.path)}
-                </div>
-              </button>
-            ))
-          ) : (
-            filtered.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                className={`list-item${id === n.id ? ' active' : ''}`}
-                onClick={() => navigate(`/sessions/${encodeURIComponent(n.id)}`)}
-              >
-                <div className="title">{titleFromExcerpt(n.promptExcerpt)}</div>
-                <div className="meta">
-                  {formatDay(n.startedAt)} · {n.status} · {n.fileCount}f
-                  {n.incomingEdges != null ? ` · e ${n.incomingEdges}/${n.outgoingEdges}` : ''}
-                </div>
-                {(n.labels?.length ?? 0) > 0 && (
-                  <div style={{ marginTop: 4 }}>
-                    {n.labels!.map((l) => (
-                      <span key={l} className="badge accent">
-                        {l}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </button>
-            ))
-          )}
-          {!fileTouches && filtered.length === 0 && (
-            <div className="empty">
-              No sessions
-              <br />
-              <code>whyso rebuild</code>
+          <div className="list-head">
+            <div className="row">
+              <h1 className="grow">Sessions</h1>
+              <span className="badge">{count}</span>
             </div>
-          )}
+            <div className="input-icon">
+              <Search size={15} />
+              <input
+                className="input"
+                placeholder="Filter by prompt, id or label"
+                aria-label="Filter sessions"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </div>
+            <form
+              className="scope-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                applyFilters()
+              }}
+            >
+              <input
+                className="input sm"
+                placeholder="File path"
+                aria-label="Only sessions that touched this file"
+                value={fileInput}
+                onChange={(e) => setFileInput(e.target.value)}
+              />
+              <input
+                className="input sm"
+                placeholder="Path prefix"
+                aria-label="Only sessions that touched files under this prefix"
+                value={prefixInput}
+                onChange={(e) => setPrefixInput(e.target.value)}
+              />
+              <button type="submit" className="btn sm">
+                Apply
+              </button>
+              {scoped && (
+                <button
+                  type="button"
+                  className="btn sm ghost icon"
+                  aria-label="Clear file filters"
+                  title="Clear file filters"
+                  onClick={() => applyFilters('', '')}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </form>
+            <CliHint command={cli} />
+          </div>
+
+          {listError && <ErrorBanner message={listError} />}
+
+          <div className="list-scroll">
+            {fileTouches
+              ? fileTouches.map((t, i) => (
+                  <button
+                    key={`${t.sessionId}-${t.at}-${i}`}
+                    type="button"
+                    className={`list-item${id === t.sessionId ? ' active' : ''}`}
+                    onClick={() => open(t.sessionId)}
+                  >
+                    <div className="title truncate">{titleFromExcerpt(t.promptExcerpt)}</div>
+                    <div className="meta">
+                      <span title={formatDateTime(t.at)}>{formatRelativeTime(t.at)}</span>
+                      <span className="badge">{t.action}</span>
+                      <span className="mono truncate">{basename(t.path)}</span>
+                    </div>
+                  </button>
+                ))
+              : filtered.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className={`list-item${id === n.id ? ' active' : ''}`}
+                    onClick={() => open(n.id)}
+                  >
+                    <div className="row">
+                      <div className="title truncate grow">{titleFromExcerpt(n.promptExcerpt)}</div>
+                      {n.status === 'active' && <StatusBadge status={n.status} />}
+                    </div>
+                    <div className="meta">
+                      <span title={formatDateTime(n.startedAt)}>{formatRelativeTime(n.startedAt)}</span>
+                      <span>{n.agent}</span>
+                      <span className="meta-icon" title={`${n.fileCount} files changed`}>
+                        <FileText size={12} />
+                        {n.fileCount}
+                      </span>
+                      {n.commitCount > 0 && (
+                        <span className="meta-icon" title={`${n.commitCount} commits`}>
+                          <GitCommitHorizontal size={12} />
+                          {n.commitCount}
+                        </span>
+                      )}
+                    </div>
+                    {(n.labels?.length ?? 0) > 0 && (
+                      <div className="row wrap">
+                        {n.labels.map((l) => (
+                          <span key={l} className="badge accent">
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                ))}
+            {count === 0 &&
+              (loading && !scoped ? (
+                <SkeletonRows rows={6} />
+              ) : (
+                <EmptyState
+                  compact
+                  icon={<Inbox size={20} />}
+                  title={filter || scoped ? 'No matching sessions' : 'No sessions yet'}
+                  hint={filter || scoped ? 'Try a different filter.' : undefined}
+                  cli={filter || scoped ? undefined : 'whyso rebuild'}
+                />
+              ))}
+          </div>
         </div>
+
         <div className="split-detail">
           {id ? (
-            <SessionDetailView sessionId={id} onChanged={() => void refresh()} />
+            <SessionDetailView
+              key={id}
+              sessionId={id}
+              backTo={`/sessions${qs}`}
+              onChanged={() => void refresh()}
+            />
           ) : (
-            <div className="empty">
-              Select a session
-              <br />
-              <code>whyso session &lt;id&gt;</code>
-            </div>
+            <EmptyState
+              icon={<MousePointerClick size={20} />}
+              title="Select a session"
+              hint="Pick a session from the list to see its prompts, activity, files and commits."
+            />
           )}
         </div>
       </div>
@@ -191,9 +283,11 @@ export function SessionsView() {
 
 export function SessionDetailView({
   sessionId,
+  backTo,
   onChanged,
 }: {
   sessionId: string
+  backTo?: string
   onChanged?: () => void
 }) {
   const [detail, setDetail] = useState<SessionDetail | null>(null)
@@ -237,240 +331,321 @@ export function SessionDetailView({
     }
   }, [tab, sessionId])
 
-  if (error) return <div className="error-banner">{error}</div>
-  if (!detail) return <div className="empty">Loading session…</div>
+  const back = backTo && (
+    <Link className="back-link" to={backTo}>
+      <ChevronLeft size={15} />
+      All sessions
+    </Link>
+  )
 
-  const tabs: { id: Tab; label: string }[] = [
+  if (error) {
+    return (
+      <div className="detail-head">
+        {back}
+        <ErrorBanner message={error} />
+      </div>
+    )
+  }
+  if (!detail) {
+    return (
+      <>
+        <div className="detail-head">{back}</div>
+        <SkeletonRows rows={6} />
+      </>
+    )
+  }
+
+  async function changeLabel(action: 'add' | 'remove', value: string) {
+    try {
+      if (action === 'add') await api.addLabel(sessionId, value)
+      else await api.removeLabel(sessionId, value)
+      setDetail(await api.session(sessionId))
+      await refresh()
+      onChanged?.()
+      setToast(action === 'add' ? `Labeled as ${value}` : `Removed label ${value}`)
+      if (action === 'add') setLabel('')
+    } catch (e) {
+      setToast(errorMessage(e), 'error')
+    }
+  }
+
+  const tabs: TabItem<Tab>[] = [
     { id: 'summary', label: 'Summary' },
-    { id: 'activity', label: 'Activity' },
-    { id: 'files', label: 'Files' },
-    { id: 'tests', label: 'Tests' },
-    { id: 'commands', label: 'Commands' },
-    { id: 'git', label: 'Git' },
+    { id: 'activity', label: 'Activity', count: detail.turns.length },
+    { id: 'files', label: 'Files', count: detail.files.length },
+    { id: 'tests', label: 'Tests', count: detail.tests.length },
+    { id: 'commands', label: 'Commands', count: detail.commands.length },
+    { id: 'git', label: 'Git', count: detail.commits.length },
     { id: 'events', label: 'Events' },
   ]
+  const eventsJson = events ? JSON.stringify(events, null, 2) : ''
 
   return (
-    <div>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-        <h1 style={{ margin: 0, fontSize: 16 }}>{titleFromExcerpt(detail.prompts[0])}</h1>
-        <div className="mono dim" style={{ marginTop: 4 }}>
-          {detail.id}
+    <>
+      <div className="detail-sticky">
+        <div className="detail-head">
+          {back}
+          <h1>{titleFromExcerpt(detail.prompts[0])}</h1>
+          <div className="row wrap">
+            <StatusBadge status={detail.status} />
+            <span className="badge">{detail.agent}</span>
+            {detail.durationSeconds != null && (
+              <span className="badge" title="Duration">
+                {formatDuration(detail.durationSeconds)}
+              </span>
+            )}
+            <span className="dim">{formatDateTime(detail.startedAt)}</span>
+          </div>
+          <div className="row wrap">
+            {detail.labels.map((l) => (
+              <span key={l} className="label-chip">
+                {l}
+                <button
+                  type="button"
+                  aria-label={`Remove label ${l}`}
+                  onClick={() => void changeLabel('remove', l)}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            <input
+              className="input sm label-input"
+              placeholder="Add label…"
+              aria-label="Add label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && label.trim()) void changeLabel('add', label.trim())
+              }}
+            />
+          </div>
+          <div className="row wrap">
+            <span className="mono dim">{detail.id}</span>
+            <CopyButton text={detail.id} label="Copy session id" />
+          </div>
         </div>
-        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          <span className={`badge ${detail.status === 'active' ? 'warn' : 'ok'}`}>{detail.status}</span>
-          <span className="badge">{detail.agent}</span>
-          <span className="badge">{formatDuration(detail.durationSeconds)}</span>
-          {detail.labels.map((l) => (
-            <span key={l} className="label-chip">
-              {l}
-              <button
-                type="button"
-                onClick={() =>
-                  void (async () => {
-                    await api.removeLabel(sessionId, l)
-                    const d = await api.session(sessionId)
-                    setDetail(d)
-                    await refresh()
-                    onChanged?.()
-                    setToast(`Removed ${l}`)
-                  })()
-                }
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <input
-            className="inline-input"
-            style={{ width: 120 }}
-            placeholder="add label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && label.trim()) {
-                void (async () => {
-                  await api.addLabel(sessionId, label.trim())
-                  const d = await api.session(sessionId)
-                  setDetail(d)
-                  await refresh()
-                  onChanged?.()
-                  setToast(`Labeled ${label.trim()}`)
-                  setLabel('')
-                })()
-              }
-            }}
-          />
-        </div>
-        <div className="cli-hint">
-          whyso session {sessionId} · whyso activity {sessionId} · whyso events {sessionId}
-        </div>
+        <Tabs tabs={tabs} value={tab} onChange={setTab} />
       </div>
 
-      <div className="tabs">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`tab${tab === t.id ? ' active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="detail-body">
+      <div className="detail-body" role="tabpanel">
         {tab === 'summary' && (
           <div className="stack">
+            <CliHint command={`whyso session ${sessionId}`} />
             <div className="block">
-              <h3>First prompt</h3>
-              <pre className="pre">{detail.prompts[0] || '—'}</pre>
+              <h3 className="section-title">First prompt</h3>
+              <pre className="pre clamp">{detail.prompts[0] || '—'}</pre>
             </div>
-            {detail.responses[0] && (
+            {detail.responses.length > 0 && (
               <div className="block">
-                <h3>Last response</h3>
-                <pre className="pre">{detail.responses[detail.responses.length - 1]}</pre>
+                <h3 className="section-title">Last response</h3>
+                <pre className="pre clamp">{detail.responses[detail.responses.length - 1]}</pre>
               </div>
             )}
             <div className="block">
-              <h3>Afterwards</h3>
-              {detail.afterwards.length === 0 && <div className="dim">—</div>}
-              {detail.afterwards.map((a) => (
-                <div key={a.id} style={{ marginBottom: 6 }}>
-                  <Link to={`/sessions/${encodeURIComponent(a.id)}`}>
-                    {titleFromExcerpt(a.promptExcerpt)}
-                  </Link>
-                  <div className="dim mono">
-                    via {a.via} · {formatTime(a.startedAt)}
+              <h3 className="section-title">Afterwards</h3>
+              {detail.afterwards.length === 0 && <div className="dim">No follow-up sessions</div>}
+              <div className="stack tight">
+                {detail.afterwards.map((a) => (
+                  <div key={a.id}>
+                    <Link to={`/sessions/${encodeURIComponent(a.id)}`}>
+                      {titleFromExcerpt(a.promptExcerpt)}
+                    </Link>
+                    <div className="dim">
+                      {a.via ? `via ${a.via} · ` : ''}
+                      {formatDateTime(a.startedAt)}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {tab === 'activity' && (
           <div className="stack">
-            {detail.turns.map((t, i) => (
-              <div key={i} className="turn block">
-                <h3>
-                  Turn {i + 1} · {formatTime(t.startedAt)}
-                </h3>
-                <pre className="pre">{t.prompt || '(preamble)'}</pre>
-                {t.plan && (
-                  <>
-                    <h3 style={{ marginTop: 10 }}>Plan</h3>
-                    <pre className="pre">{t.plan}</pre>
-                  </>
-                )}
-                {t.actions.map((a, j) => (
-                  <div key={j} className="action-row">
-                    <span className="kind">{a.kind}</span>
-                    <span>{a.summary}</span>
-                  </div>
+            <CliHint command={`whyso activity ${sessionId}`} />
+            {detail.turns.length === 0 ? (
+              <EmptyState compact title="No turns recorded" />
+            ) : (
+              <ol className="timeline">
+                {detail.turns.map((t, i) => (
+                  <li key={i} className="turn">
+                    <div className="turn-marker">{i + 1}</div>
+                    <div className="turn-body">
+                      <div className="turn-meta">
+                        <span>{t.prompt ? 'Prompt' : 'Before first prompt'}</span>
+                        <span className="dim">{formatTime(t.startedAt)}</span>
+                        {t.commits.map((c) => (
+                          <Link
+                            key={c}
+                            className="badge info mono"
+                            to={`/why?mode=commit&sha=${encodeURIComponent(c)}`}
+                          >
+                            {shortSha(c)}
+                          </Link>
+                        ))}
+                      </div>
+                      {t.prompt && <pre className="pre clamp prompt-text">{t.prompt}</pre>}
+                      {t.actions.length > 0 && (
+                        <ul className="actions">
+                          {t.actions.map((a, j) => (
+                            <ActionRow key={j} action={a} />
+                          ))}
+                        </ul>
+                      )}
+                      {t.plan && (
+                        <details className="response">
+                          <summary>Agent response</summary>
+                          <pre className="pre clamp">{t.plan}</pre>
+                        </details>
+                      )}
+                    </div>
+                  </li>
                 ))}
-              </div>
-            ))}
-            {detail.turns.length === 0 && <div className="empty">No turns</div>}
+              </ol>
+            )}
           </div>
         )}
 
-        {tab === 'files' && (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Path</th>
-                  <th>Action</th>
-                  <th>+/−</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.files.map((f) => (
-                  <tr key={f.path}>
-                    <td className="mono">
-                      <Link to={`/why?mode=file&path=${encodeURIComponent(f.path)}`}>
-                        {basename(f.path)}
-                      </Link>
-                      <div className="dim">{f.path}</div>
-                    </td>
-                    <td>{f.action}</td>
-                    <td className="mono">
-                      {f.additions != null ? `+${f.additions}` : ''}{' '}
-                      {f.deletions != null ? `−${f.deletions}` : ''}
-                    </td>
+        {tab === 'files' &&
+          (detail.files.length === 0 ? (
+            <EmptyState compact title="No files changed" />
+          ) : (
+            <div className="panel table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Path</th>
+                    <th>Action</th>
+                    <th>Lines</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {detail.files.length === 0 && <div className="empty">No files</div>}
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {detail.files.map((f) => (
+                    <tr key={f.path}>
+                      <td>
+                        <Link
+                          className="mono"
+                          to={`/why?mode=file&path=${encodeURIComponent(f.path)}`}
+                          title="Trace this file"
+                        >
+                          {basename(f.path)}
+                        </Link>
+                        <div className="mono dim">{f.path}</div>
+                      </td>
+                      <td>
+                        <span className="badge">{f.action}</span>
+                      </td>
+                      <td className="mono">
+                        {f.additions != null && <span className="num-add">+{f.additions}</span>}{' '}
+                        {f.deletions != null && <span className="num-del">−{f.deletions}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
 
         {tab === 'tests' && (
-          <div className="stack">
+          <div className="stack tight">
             {detail.tests.map((t, i) => (
-              <div key={i} className="block">
-                <span className={`badge ${t.failed ? 'err' : 'ok'}`}>{t.status ?? t.phase}</span>{' '}
-                {t.name ?? t.suite ?? 'test'}
-                <div className="dim mono">
-                  passed {t.passed ?? '—'} · failed {t.failed ?? '—'}
+              <div key={i} className="block row">
+                <FlaskConical size={15} className="dim" />
+                <div className="grow">
+                  <div>{t.name ?? t.suite ?? 'test'}</div>
+                  <div className="dim mono">
+                    passed {t.passed ?? '—'} · failed {t.failed ?? '—'}
+                  </div>
                 </div>
+                <span className={`badge ${t.failed ? 'err' : 'ok'}`}>{t.status ?? t.phase}</span>
               </div>
             ))}
-            {detail.tests.length === 0 && <div className="empty">No tests</div>}
+            {detail.tests.length === 0 && <EmptyState compact title="No test runs" />}
           </div>
         )}
 
         {tab === 'commands' && (
-          <div className="stack">
+          <div className="stack tight">
             {detail.commands.map((c, i) => (
-              <pre key={i} className="pre block">
-                {c}
-              </pre>
+              <div key={i} className="code-block">
+                <pre>{c}</pre>
+                <CopyButton text={c} label="Copy command" />
+              </div>
             ))}
-            {detail.commands.length === 0 && <div className="empty">No commands</div>}
+            {detail.commands.length === 0 && <EmptyState compact title="No commands run" />}
           </div>
         )}
 
         {tab === 'git' && (
           <div className="stack">
             <div className="block">
-              <h3>HEAD</h3>
+              <h3 className="section-title">HEAD</h3>
               <div className="mono">
                 {shortSha(detail.gitHead)} → {shortSha(detail.gitHeadAfter)}
               </div>
             </div>
             <div className="block">
-              <h3>Commits</h3>
-              {detail.commits.map((c) => (
-                <div key={c}>
-                  <Link className="mono" to={`/why?mode=commit&sha=${encodeURIComponent(c)}`}>
+              <h3 className="section-title">Commits</h3>
+              <div className="stack tight">
+                {detail.commits.map((c) => (
+                  <Link key={c} className="mono" to={`/why?mode=commit&sha=${encodeURIComponent(c)}`}>
                     {c}
                   </Link>
-                </div>
-              ))}
-              {detail.commits.length === 0 && <div className="dim">—</div>}
+                ))}
+              </div>
+              {detail.commits.length === 0 && <div className="dim">No commits linked</div>}
             </div>
             <div className="block">
-              <h3>Edges</h3>
-              {detail.edges.map((e) => (
-                <div key={`${e.from}-${e.to}-${e.kind}`} className="mono dim">
-                  {e.from} -[{e.kind}
-                  {e.label ? `:${e.label}` : ''}]→ {e.to}
-                </div>
-              ))}
+              <h3 className="section-title">Edges</h3>
+              <div className="stack tight">
+                {detail.edges.map((e) => {
+                  const outgoing = e.from === detail.id
+                  const other = outgoing ? e.to : e.from
+                  return (
+                    <div key={`${e.from}-${e.to}-${e.kind}`} className="row wrap">
+                      <span className="dim">{outgoing ? '→' : '←'}</span>
+                      <Link className="mono" to={`/sessions/${encodeURIComponent(other)}`}>
+                        {other}
+                      </Link>
+                      <span className={`badge${e.manual ? ' accent' : ''}`}>{e.kind}</span>
+                      {e.label && <span className="badge">{e.label}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+              {detail.edges.length === 0 && <div className="dim">No edges</div>}
             </div>
           </div>
         )}
 
         {tab === 'events' && (
-          <pre className="pre block" style={{ maxHeight: 480, overflow: 'auto' }}>
-            {events ? JSON.stringify(events, null, 2) : 'Loading…'}
-          </pre>
+          <div className="stack">
+            <CliHint command={`whyso events ${sessionId}`} />
+            {events ? (
+              <div className="code-block">
+                <pre>{eventsJson}</pre>
+                <CopyButton text={eventsJson} label="Copy JSON" />
+              </div>
+            ) : (
+              <SkeletonRows rows={8} />
+            )}
+          </div>
         )}
       </div>
-    </div>
+    </>
+  )
+}
+
+function ActionRow({ action }: { action: Activity }) {
+  const Icon = activityIcon(action.kind)
+  const failed = action.kind.toLowerCase().includes('error') || Boolean(action.errorMessage)
+  return (
+    <li className={`action${failed ? ' failed' : ''}`}>
+      <Icon size={14} />
+      <span className="kind">{action.kind}</span>
+      <span className="summary">{action.summary}</span>
+    </li>
   )
 }

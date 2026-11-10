@@ -1,15 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { buildCommands, filterCommands, type PaletteCommand } from '../commands'
+import { ArrowLeft, ArrowRight, CircleAlert, Search, TextCursorInput, Zap, type LucideIcon } from 'lucide-react'
+import { buildCommands, filterCommands, type CommandKind, type PaletteCommand } from '../commands'
 import { useAppData } from '../AppData'
+import { errorMessage } from '../format'
+import { useConfirm } from '../confirm'
 
 interface Props {
   open: boolean
   onClose: () => void
 }
 
+const KIND_META: Record<CommandKind, { group: string; icon: LucideIcon }> = {
+  navigate: { group: 'Go to', icon: ArrowRight },
+  query: { group: 'Query', icon: TextCursorInput },
+  mutate: { group: 'Actions', icon: Zap },
+}
+
 export function CommandPalette({ open, onClose }: Props) {
   const navigate = useNavigate()
+  const confirm = useConfirm()
   const { refresh, setToast } = useAppData()
   const commands = useMemo(() => buildCommands(), [])
   const [query, setQuery] = useState('')
@@ -19,24 +29,34 @@ export function CommandPalette({ open, onClose }: Props) {
   const [argIndex, setArgIndex] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
 
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query])
 
   useEffect(() => {
-    if (!open) {
-      setQuery('')
-      setActive(0)
-      setPending(null)
-      setArgValues({})
-      setArgIndex(0)
-      setError(null)
-      setBusy(false)
+    if (open) {
+      returnFocus.current = document.activeElement as HTMLElement | null
+      return
     }
+    setQuery('')
+    setActive(0)
+    setPending(null)
+    setArgValues({})
+    setArgIndex(0)
+    setError(null)
+    setBusy(false)
+    returnFocus.current?.focus?.()
+    returnFocus.current = null
   }, [open])
 
   useEffect(() => {
     setActive(0)
   }, [query])
+
+  useEffect(() => {
+    listRef.current?.querySelector('.palette-item.active')?.scrollIntoView({ block: 'nearest' })
+  }, [active])
 
   if (!open) return null
 
@@ -51,14 +71,14 @@ export function CommandPalette({ open, onClose }: Props) {
   }
 
   async function runCommand(cmd: PaletteCommand, args: Record<string, string>) {
-    if (cmd.confirm && !window.confirm(cmd.confirm)) return
+    if (cmd.confirm && !(await confirm({ title: cmd.title, message: cmd.confirm }))) return
     setBusy(true)
     setError(null)
     try {
       await cmd.run(args, helpers)
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errorMessage(e))
     } finally {
       setBusy(false)
     }
@@ -69,6 +89,7 @@ export function CommandPalette({ open, onClose }: Props) {
       setPending(cmd)
       setArgValues({})
       setArgIndex(0)
+      setError(null)
       return
     }
     void runCommand(cmd, {})
@@ -90,6 +111,8 @@ export function CommandPalette({ open, onClose }: Props) {
     void runCommand(pending, argValues)
   }
 
+  const isLastArg = argIndex + 1 >= (pending?.args?.length ?? 0)
+
   return (
     <div
       className="palette-backdrop"
@@ -100,12 +123,14 @@ export function CommandPalette({ open, onClose }: Props) {
       <div
         className="palette"
         role="dialog"
+        aria-modal="true"
         aria-label="Command palette"
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault()
             if (pending) {
               setPending(null)
+              setError(null)
               return
             }
             onClose()
@@ -128,46 +153,78 @@ export function CommandPalette({ open, onClose }: Props) {
       >
         {!pending ? (
           <>
-            <input
-              className="palette-input"
-              autoFocus
-              placeholder="Type a command… (status, tree, why, link, rebuild)"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <div className="palette-list">
+            <div className="palette-head">
+              <Search size={17} />
+              <input
+                autoFocus
+                aria-label="Command"
+                placeholder="Type a command… (status, tree, why, link, rebuild)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <div className="palette-list" ref={listRef}>
               {filtered.length === 0 && <div className="palette-empty">No matching commands</div>}
-              {filtered.map((cmd, i) => (
-                <button
-                  key={cmd.id}
-                  type="button"
-                  className={`palette-item${i === active ? ' active' : ''}`}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => selectCommand(cmd)}
-                >
-                  <span className="title">{cmd.title}</span>
-                  <span className="sub">{cmd.cli}</span>
-                </button>
-              ))}
+              {filtered.map((cmd, i) => {
+                const meta = KIND_META[cmd.kind]
+                const Icon = meta.icon
+                const startsGroup = i === 0 || filtered[i - 1]!.kind !== cmd.kind
+                return (
+                  <div key={cmd.id}>
+                    {startsGroup && <div className="palette-group">{meta.group}</div>}
+                    <button
+                      type="button"
+                      className={`palette-item${i === active ? ' active' : ''}`}
+                      onMouseMove={() => setActive(i)}
+                      onClick={() => selectCommand(cmd)}
+                    >
+                      <Icon size={15} />
+                      <span className="title">{cmd.title}</span>
+                      <span className="sub">{cmd.cli}</span>
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="palette-foot">
+              <span className="hint">
+                <kbd>↑</kbd>
+                <kbd>↓</kbd> navigate
+              </span>
+              <span className="hint">
+                <kbd>Enter</kbd> run
+              </span>
+              <span className="hint">
+                <kbd>Esc</kbd> close
+              </span>
             </div>
           </>
         ) : (
           <>
-            <div className="palette-input" style={{ fontWeight: 600 }}>
-              {pending.title}
+            <div className="palette-head">
+              <button
+                type="button"
+                className="copy-btn"
+                aria-label="Back to commands"
+                onClick={() => {
+                  setPending(null)
+                  setError(null)
+                }}
+                disabled={busy}
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <span className="title">{pending.title}</span>
+              <span className="mono">{pending.cli}</span>
             </div>
-            <div className="palette-list">
-              <div className="muted" style={{ padding: '4px 10px' }}>
-                {pending.cli}
-              </div>
+            <div className="palette-args">
               {pending.args!.map((arg, i) => (
-                <div key={arg.name} className="prompt-row" style={{ opacity: i === argIndex ? 1 : 0.5 }}>
-                  <span className="mono" style={{ minWidth: 64 }}>
-                    {arg.name}
-                  </span>
+                <label key={arg.name} className={`palette-arg${i === argIndex ? '' : ' inactive'}`}>
+                  <span className="mono">{arg.name}</span>
                   <input
-                    className="inline-input"
-                    style={{ flex: 1 }}
+                    // Remount when it becomes the current step so autoFocus applies.
+                    key={i === argIndex ? 'current' : 'idle'}
+                    className="input"
                     autoFocus={i === argIndex}
                     disabled={i !== argIndex || busy}
                     placeholder={arg.placeholder + (arg.optional ? ' (optional)' : '')}
@@ -182,20 +239,36 @@ export function CommandPalette({ open, onClose }: Props) {
                       }
                     }}
                   />
-                </div>
+                </label>
               ))}
             </div>
-            <div className="prompt-row">
-              <button type="button" className="btn" onClick={() => setPending(null)} disabled={busy}>
-                Back
-              </button>
-              <button type="button" className="btn primary" onClick={submitArg} disabled={busy}>
-                {argIndex + 1 < (pending.args?.length ?? 0) ? 'Next' : 'Run'}
-              </button>
+            {error && (
+              <div className="banner" role="alert">
+                <CircleAlert size={15} />
+                <span>{error}</span>
+              </div>
+            )}
+            <div className="palette-foot">
+              <span className="hint">
+                <kbd>Enter</kbd> {isLastArg ? 'run' : 'next'}
+              </span>
+              <span className="hint">
+                <kbd>Esc</kbd> back
+              </span>
+              <div className="actions">
+                <button type="button" className="btn sm primary" onClick={submitArg} disabled={busy}>
+                  {isLastArg ? 'Run' : 'Next'}
+                </button>
+              </div>
             </div>
           </>
         )}
-        {error && <div className="error-banner" style={{ margin: 8 }}>{error}</div>}
+        {!pending && error && (
+          <div className="banner" role="alert">
+            <CircleAlert size={15} />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
     </div>
   )

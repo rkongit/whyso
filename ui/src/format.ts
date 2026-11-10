@@ -25,6 +25,23 @@ export function formatDay(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+export function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const s = Math.round((Date.now() - then) / 1000)
+  if (s < 45) return 'just now'
+  if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`
+  if (s < 7 * 86400) return `${Math.round(s / 86400)}d ago`
+  return formatDay(iso)
+}
+
+export function formatDateTime(iso?: string | null): string {
+  if (!iso) return ''
+  return `${formatDay(iso)}, ${formatTime(iso)}`
+}
+
 export function dayKey(iso: string): string {
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -40,4 +57,8 @@ export function titleFromExcerpt(excerpt?: string | null, fallback = 'Untitled w
 export function basename(path: string): string {
   const parts = path.replace(/\\/g, '/').split('/')
   return parts[parts.length - 1] || path
+}
+
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }

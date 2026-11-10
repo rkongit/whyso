@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-
 import { AppProvider } from './AppData'
 import { AppShell } from './components/AppShell'
 import { CommandPalette } from './components/CommandPalette'
+import { ConfirmProvider } from './components/ConfirmDialog'
 import { OverviewView } from './views/OverviewView'
 import { TreeView } from './views/TreeView'
 import { SessionsView } from './views/SessionsView'
@@ -54,7 +55,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppProvider>
-        <ShellRoutes />
+        <ConfirmProvider>
+          <ShellRoutes />
+        </ConfirmProvider>
       </AppProvider>
     </BrowserRouter>
   )
