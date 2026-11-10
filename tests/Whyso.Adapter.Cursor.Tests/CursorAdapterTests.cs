@@ -101,7 +101,7 @@ public class CursorAdapterTests
     }
 
     [Fact]
-    public void Merge_replaces_old_worktree_command()
+    public void Merge_replaces_old_whyso_command()
     {
         var existing = JsonNode.Parse("""
             {

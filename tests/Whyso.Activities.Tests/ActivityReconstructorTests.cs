@@ -237,7 +237,7 @@ public class ActivityReconstructorTests
             Ev(EventType.PromptSubmitted, Merge(Ctx(), new JsonObject { ["prompt"] = "touch file" })),
             Ev(EventType.FileModified, Merge(Ctx(), new JsonObject
             {
-                ["path"] = @"src\Worktree\Foo.cs",
+                ["path"] = @"src\Whyso\Foo.cs",
                 ["edits"] = new JsonArray(new JsonObject
                 {
                     ["old_string"] = "a",
@@ -247,7 +247,7 @@ public class ActivityReconstructorTests
             Ev(EventType.AgentResponse, Merge(Ctx(), new JsonObject { ["text"] = "Updated Foo." })),
         ]);
 
-        var result = ProvenanceQuery.Trace(new ProvenanceSubject.FilePath("src/Worktree/Foo.cs"), [timeline]);
+        var result = ProvenanceQuery.Trace(new ProvenanceSubject.FilePath("src/Whyso/Foo.cs"), [timeline]);
         var hit = Assert.Single(result.Hits);
         Assert.Equal(ProvenanceMatchKind.FileTouch, hit.MatchKind);
         Assert.Equal("touch file", hit.Turn.Prompt.Text);

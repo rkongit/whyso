@@ -19,7 +19,7 @@ internal static class Migrator
         {
             cmd.CommandText =
                 """
-                CREATE TABLE IF NOT EXISTS _worktree_migrations (
+                CREATE TABLE IF NOT EXISTS _whyso_migrations (
                     version TEXT PRIMARY KEY NOT NULL,
                     applied_at TEXT NOT NULL
                 );
@@ -30,7 +30,7 @@ internal static class Migrator
         var applied = new HashSet<string>(StringComparer.Ordinal);
         using (var cmd = connection.CreateCommand())
         {
-            cmd.CommandText = "SELECT version FROM _worktree_migrations";
+            cmd.CommandText = "SELECT version FROM _whyso_migrations";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
@@ -64,7 +64,7 @@ internal static class Migrator
             {
                 cmd.Transaction = tx;
                 cmd.CommandText =
-                    "INSERT INTO _worktree_migrations (version, applied_at) VALUES ($v, $t)";
+                    "INSERT INTO _whyso_migrations (version, applied_at) VALUES ($v, $t)";
                 cmd.Parameters.AddWithValue("$v", name);
                 cmd.Parameters.AddWithValue("$t", DateTimeOffset.UtcNow.ToString("O"));
                 cmd.ExecuteNonQuery();

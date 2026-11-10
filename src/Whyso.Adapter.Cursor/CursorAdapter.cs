@@ -114,8 +114,8 @@ public static class CursorAdapter
 
     public static AgentEvent PostEvent(AgentEvent event_, string url) => HookSupport.PostEvent(event_, url);
 
-    public static string CursorHookCommand(string worktreeBin) =>
-        $"\"{worktreeBin}\" hook cursor";
+    public static string CursorHookCommand(string whysoBin) =>
+        $"\"{whysoBin}\" hook cursor";
 
     public static JsonObject MergeCursorHooks(JsonNode? existing, string command)
     {
@@ -149,7 +149,7 @@ public static class CursorAdapter
             for (var i = arr.Count - 1; i >= 0; i--)
             {
                 var cmd = arr[i]?["command"]?.GetValue<string>();
-                if (cmd is not null && IsWorktreeHookCommand(cmd))
+                if (cmd is not null && IsWhysoHookCommand(cmd))
                 {
                     arr.RemoveAt(i);
                 }
@@ -161,7 +161,7 @@ public static class CursorAdapter
         return root;
     }
 
-    private static bool IsWorktreeHookCommand(string command) => HookSupport.IsOwnHookCommand(command, "cursor");
+    private static bool IsWhysoHookCommand(string command) => HookSupport.IsOwnHookCommand(command, "cursor");
 
     private static EventType? MapHookToEventType(string hook) => hook switch
     {

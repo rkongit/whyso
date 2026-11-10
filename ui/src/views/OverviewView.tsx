@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAppData } from '../AppData'
 import { formatDay, shortSha, titleFromExcerpt } from '../format'
-import worktreeIcon from '../assets/whyso-icon.png'
+import whysoIcon from '../assets/whyso-icon.png'
 
 export function OverviewView() {
   const { status, sessions, refresh, setToast, loading } = useAppData()
@@ -12,7 +12,7 @@ export function OverviewView() {
     <div className="page">
       <div className="page-header">
         <div className="page-brand">
-          <img className="page-icon" src={worktreeIcon} alt="Whyso" width={48} height={48} />
+          <img className="page-icon" src={whysoIcon} alt="Whyso" width={48} height={48} />
           <div>
             <h1>Overview</h1>
             <p>Project status and recent sessions — equivalent to <code>whyso status</code>.</p>

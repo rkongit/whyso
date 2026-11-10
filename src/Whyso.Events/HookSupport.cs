@@ -163,13 +163,12 @@ public static class HookSupport
     }
 
     /// <summary>
-    /// True when a hook command invokes this tool's adapter for <paramref name="agent"/>, under the
-    /// current "whyso" name or the pre-rename "worktree" name.
+    /// True when a hook command invokes this tool's adapter for <paramref name="agent"/>.
     /// </summary>
     public static bool IsOwnHookCommand(string command, string agent)
     {
         var lower = command.ToLowerInvariant();
-        return (lower.Contains("whyso") || lower.Contains("worktree"))
+        return lower.Contains("whyso")
             && lower.Contains("hook")
             && lower.Contains(agent);
     }

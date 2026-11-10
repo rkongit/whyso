@@ -10,9 +10,6 @@ line exists, and tells your next agent session what was already decided.
   session is encrypted with its own key, so `whyso forget` can erase it.
 - **Local-first:** everything stays in `.whyso/` in your repo. No cloud, no LLM calls.
 
-> Formerly **Worktree**. Renamed to avoid confusion with `git worktree`.
-> Existing `.ai-worktree/` data is moved to `.whyso/` automatically on first run.
-
 ## Install
 
 Whyso is a single self-contained binary: no runtime to install and no extra files.
@@ -151,7 +148,7 @@ In a clone that fetched the notes (`git fetch origin refs/notes/whyso:refs/notes
 ```text
 .whyso/
 ├── config.toml
-├── worktree.db          # indexed / queryable projection
+├── whyso.db             # indexed / queryable projection
 ├── keys/
 │   └── sess_….key       # per-session encryption keys (delete = forget)
 └── events/
@@ -196,7 +193,7 @@ See [docs/architecture.md](docs/architecture.md).
 
 | Command | Description |
 | --- | --- |
-| `whyso init` | Create `.whyso/` and install hooks for detected agents (idempotent; migrates `.ai-worktree/`) |
+| `whyso init` | Create `.whyso/` and install hooks for detected agents (idempotent) |
 | `whyso daemon` | Run the local collector in the foreground (`127.0.0.1:9477`); hooks normally start it for you |
 | `whyso daemon stop` | Stop this project's collector |
 | `whyso status` | Project + daemon status |

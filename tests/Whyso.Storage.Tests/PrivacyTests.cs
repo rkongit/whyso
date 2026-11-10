@@ -167,24 +167,4 @@ public class EncryptionTests
         Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(
             () => PayloadCrypto.Decrypt(key, "evt_2", "sess_1", sealedPayload));
     }
-
-    [Fact]
-    public void Legacy_data_dir_is_migrated()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "wt-legacy-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(dir, ".ai-worktree", "events"));
-        File.WriteAllText(Path.Combine(dir, ".ai-worktree", "config.toml"), "x");
-        try
-        {
-            Assert.Equal(Path.Combine(dir, ".ai-worktree"), WorktreePaths.WorktreeDir(dir));
-            WorktreePaths.TryMigrateLegacyDir(dir);
-            Assert.False(Directory.Exists(Path.Combine(dir, ".ai-worktree")));
-            Assert.True(File.Exists(Path.Combine(dir, ".whyso", "config.toml")));
-            Assert.Equal(Path.Combine(dir, ".whyso"), WorktreePaths.WorktreeDir(dir));
-        }
-        finally
-        {
-            try { Directory.Delete(dir, true); } catch { /* ignore */ }
-        }
-    }
 }

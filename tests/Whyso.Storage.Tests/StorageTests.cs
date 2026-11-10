@@ -63,7 +63,7 @@ public class StorageTests
             var (root2, cfg2) = await Store.InitProjectAsync(dir);
             Assert.Equal(root1, root2);
             Assert.Equal(cfg1.ProjectId, cfg2.ProjectId);
-            Assert.True(File.Exists(Path.Combine(root1, ".whyso", "worktree.db")));
+            Assert.True(File.Exists(Path.Combine(root1, ".whyso", "whyso.db")));
             Assert.True(Directory.Exists(Path.Combine(root1, ".whyso", "events")));
             Assert.True(File.Exists(Path.Combine(root1, ".whyso", "config.toml")));
         }
