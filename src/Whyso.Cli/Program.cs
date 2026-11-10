@@ -120,7 +120,7 @@ public static class Program
             var gitRoot = RequireGitRoot(cwd);
             var (root, config) = await Store.InitProjectAsync(gitRoot);
             Console.WriteLine($"Initialized Whyso in {root}");
-            Console.WriteLine("  database : .whyso/worktree.db");
+            Console.WriteLine("  database : .whyso/whyso.db");
             Console.WriteLine("  events   : .whyso/events/");
             Console.WriteLine("  config   : .whyso/config.toml");
             Console.WriteLine($"  project  : {config.ProjectId}");
@@ -180,7 +180,7 @@ public static class Program
             existing = JsonNode.Parse(File.ReadAllText(hooksPath));
         }
 
-        var bin = ResolveWorktreeBin();
+        var bin = ResolveWhysoBin();
         InstallWrapper(root, bin);
         var command = CursorAdapter.CursorHookCommand(bin);
         var merged = CursorAdapter.MergeCursorHooks(existing, command);
@@ -201,7 +201,7 @@ public static class Program
             existing = JsonNode.Parse(File.ReadAllText(settingsPath));
         }
 
-        var command = ClaudeCodeAdapter.HookCommand(ResolveWorktreeBin());
+        var command = ClaudeCodeAdapter.HookCommand(ResolveWhysoBin());
         var merged = ClaudeCodeAdapter.MergeSettings(existing, command);
         File.WriteAllText(
             settingsPath,
@@ -263,7 +263,7 @@ public static class Program
         {
             try
             {
-                var root = WorktreePaths.FindWorktreeRoot(Directory.GetCurrentDirectory());
+                var root = WhysoPaths.FindWhysoRoot(Directory.GetCurrentDirectory());
                 var pidPath = DaemonPidPath(root);
                 if (!File.Exists(pidPath)
                     || !int.TryParse(File.ReadAllText(pidPath).Trim(), out var pid))
@@ -305,7 +305,7 @@ public static class Program
     }
 
     private static string DaemonPidPath(string root) =>
-        Path.Combine(WorktreePaths.WorktreeDir(root), "daemon.pid");
+        Path.Combine(WhysoPaths.WhysoDir(root), "daemon.pid");
 
     private static void RemoveOwnPidFile(string? pidPath)
     {
@@ -397,7 +397,7 @@ public static class Program
     /// </summary>
     private static void StartDaemonDetached(string root)
     {
-        var bin = ResolveWorktreeBin();
+        var bin = ResolveWhysoBin();
         ProcessStartInfo psi;
         if (OperatingSystem.IsWindows())
         {
@@ -456,7 +456,7 @@ public static class Program
 
             Console.WriteLine($"Project : {root}");
             Console.WriteLine($"Project ID : {config.ProjectId}");
-            Console.WriteLine("Database : .whyso/worktree.db");
+            Console.WriteLine("Database : .whyso/whyso.db");
             Console.WriteLine($"Bind : {config.Bind}");
             Console.WriteLine($"Daemon : {daemonStatus}");
             Console.WriteLine($"Sessions : {sessions}");
@@ -609,7 +609,7 @@ public static class Program
         var get = new Command("get", "Show current settings");
         get.SetHandler(() =>
         {
-            var root = WorktreePaths.FindWorktreeRoot(Directory.GetCurrentDirectory());
+            var root = WhysoPaths.FindWhysoRoot(Directory.GetCurrentDirectory());
             var cfg = Config.Load(root);
             Console.WriteLine($"bind                  = {cfg.Bind}");
             Console.WriteLine($"context.session_start = {cfg.ContextOnSessionStart.ToString().ToLowerInvariant()}");
@@ -623,7 +623,7 @@ public static class Program
         {
             var key = ctx.ParseResult.GetValueForArgument(keyArg);
             var value = ctx.ParseResult.GetValueForArgument(valueArg);
-            var root = WorktreePaths.FindWorktreeRoot(Directory.GetCurrentDirectory());
+            var root = WhysoPaths.FindWhysoRoot(Directory.GetCurrentDirectory());
             var cfg = Config.Load(root);
             if (!cfg.TrySet(key, value))
             {
@@ -1237,7 +1237,7 @@ public static class Program
         string root;
         try
         {
-            root = WorktreePaths.FindWorktreeRoot(cwd);
+            root = WhysoPaths.FindWhysoRoot(cwd);
         }
         catch (StorageException)
         {
@@ -1263,7 +1263,7 @@ public static class Program
         }
     }
 
-    private static string ResolveWorktreeBin()
+    private static string ResolveWhysoBin()
     {
         try
         {
@@ -1289,21 +1289,19 @@ public static class Program
         }
     }
 
-    private static void InstallWrapper(string root, string worktreeBin)
+    private static void InstallWrapper(string root, string whysoBin)
     {
         var hooksDir = Path.Combine(root, ".cursor", "hooks");
         Directory.CreateDirectory(hooksDir);
         if (OperatingSystem.IsWindows())
         {
             var wrapper = Path.Combine(hooksDir, "whyso-cursor.cmd");
-            DeleteIfExists(Path.Combine(hooksDir, "worktree-cursor.cmd"));
-            File.WriteAllText(wrapper, $"@echo off\r\n\"{worktreeBin}\" hook cursor\r\n");
+            File.WriteAllText(wrapper, $"@echo off\r\n\"{whysoBin}\" hook cursor\r\n");
         }
         else
         {
             var wrapper = Path.Combine(hooksDir, "whyso-cursor.sh");
-            DeleteIfExists(Path.Combine(hooksDir, "worktree-cursor.sh"));
-            File.WriteAllText(wrapper, $"#!/usr/bin/env bash\nexec \"{worktreeBin}\" hook cursor\n");
+            File.WriteAllText(wrapper, $"#!/usr/bin/env bash\nexec \"{whysoBin}\" hook cursor\n");
             try
             {
                 Process.Start(new ProcessStartInfo
@@ -1325,7 +1323,7 @@ public static class Program
     /// <summary>
     /// Finds the Whyso project a hook belongs to: Cursor's <c>workspace_roots</c>, then the
     /// payload <c>cwd</c> (Claude Code), then the process directory. Each candidate is walked
-    /// up to the nearest initialized project (new or legacy data dir).
+    /// up to the nearest initialized project.
     /// </summary>
     private static (string Url, string? LogPath, string? Root) ResolveHookTarget(string stdin)
     {
@@ -1367,11 +1365,11 @@ public static class Program
         {
             try
             {
-                var root = WorktreePaths.FindWorktreeRoot(candidate);
+                var root = WhysoPaths.FindWhysoRoot(candidate);
                 var config = Config.Load(root);
                 return (
                     $"http://{config.Bind}/v1/events",
-                    Path.Combine(WorktreePaths.WorktreeDir(root), "hooks.log"),
+                    Path.Combine(WhysoPaths.WhysoDir(root), "hooks.log"),
                     root);
             }
             catch

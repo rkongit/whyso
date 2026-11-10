@@ -99,7 +99,7 @@ public class ClaudeCodeAdapterTests
         var existing = JsonNode.Parse("""
             {"model":"opus","hooks":{"PreToolUse":[
               {"matcher":"Bash","hooks":[{"type":"command","command":"./lint.sh"}]},
-              {"matcher":"*","hooks":[{"type":"command","command":"\"C:/old/worktree.exe\" hook claude-code"}]}
+              {"matcher":"*","hooks":[{"type":"command","command":"\"C:/old/whyso.exe\" hook claude-code"}]}
             ]}}
             """);
         var command = ClaudeCodeAdapter.HookCommand(@"C:\bin\whyso.exe");

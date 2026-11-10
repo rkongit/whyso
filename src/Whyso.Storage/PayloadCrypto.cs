@@ -18,7 +18,7 @@ public static class PayloadCrypto
     private const int NonceBytes = 12;
     private const int TagBytes = 16;
 
-    public static string KeysDir(string root) => Path.Combine(WorktreePaths.WorktreeDir(root), "keys");
+    public static string KeysDir(string root) => Path.Combine(WhysoPaths.WhysoDir(root), "keys");
 
     public static string KeyPath(string root, string sessionId)
     {

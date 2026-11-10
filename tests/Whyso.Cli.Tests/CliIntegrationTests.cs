@@ -7,7 +7,7 @@ namespace Whyso.Cli.Tests;
 
 public class CliIntegrationTests
 {
-    private static string WorktreeBin()
+    private static string WhysoBin()
     {
         var local = Path.Combine(
             AppContext.BaseDirectory,
@@ -60,12 +60,12 @@ public class CliIntegrationTests
         Assert.Equal(0, p.ExitCode);
     }
 
-    private static (int ExitCode, string StdOut, string StdErr) RunWorktree(
+    private static (int ExitCode, string StdOut, string StdErr) RunWhyso(
         string cwd, string? stdin, params string[] args)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = WorktreeBin(),
+            FileName = WhysoBin(),
             WorkingDirectory = cwd,
             RedirectStandardInput = stdin is not null,
             RedirectStandardOutput = true,
@@ -99,15 +99,15 @@ public class CliIntegrationTests
         var dir = InitGitRepo();
         try
         {
-            var (code, stdout, _) = RunWorktree(dir, null, "init");
+            var (code, stdout, _) = RunWhyso(dir, null, "init");
             Assert.Equal(0, code);
             Assert.Contains("Initialized Whyso", stdout);
-            Assert.True(File.Exists(Path.Combine(dir, ".whyso", "worktree.db")));
+            Assert.True(File.Exists(Path.Combine(dir, ".whyso", "whyso.db")));
             Assert.True(File.Exists(Path.Combine(dir, ".whyso", "config.toml")));
 
-            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
+            Assert.Equal(0, RunWhyso(dir, null, "init").ExitCode);
 
-            var status = RunWorktree(dir, null, "status");
+            var status = RunWhyso(dir, null, "status");
             Assert.Equal(0, status.ExitCode);
             Assert.Contains("Sessions : 0", status.StdOut);
             Assert.Contains("Prompts : 0", status.StdOut);
@@ -127,8 +127,8 @@ public class CliIntegrationTests
         var dir = InitGitRepo();
         try
         {
-            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
-            var result = RunWorktree(dir, null, "sessions");
+            Assert.Equal(0, RunWhyso(dir, null, "init").ExitCode);
+            var result = RunWhyso(dir, null, "sessions");
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("No sessions yet.", result.StdOut);
         }
@@ -145,7 +145,7 @@ public class CliIntegrationTests
         Process? daemon = null;
         try
         {
-            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
+            Assert.Equal(0, RunWhyso(dir, null, "init").ExitCode);
             var port = GetFreePort();
             var bind = $"127.0.0.1:{port}";
             var configPath = Path.Combine(dir, ".whyso", "config.toml");
@@ -156,7 +156,7 @@ public class CliIntegrationTests
 
             daemon = Process.Start(new ProcessStartInfo
             {
-                FileName = WorktreeBin(),
+                FileName = WhysoBin(),
                 WorkingDirectory = dir,
                 ArgumentList = { "daemon" },
                 RedirectStandardOutput = true,
@@ -210,36 +210,36 @@ public class CliIntegrationTests
                          },
                      })
             {
-                var hookResult = RunWorktree(dir, hook.ToJsonString(), "hook", "cursor");
+                var hookResult = RunWhyso(dir, hook.ToJsonString(), "hook", "cursor");
                 Assert.Equal(0, hookResult.ExitCode);
             }
 
             // Allow projection after sessionEnd.
             await Task.Delay(300);
 
-            var rebuild = RunWorktree(dir, null, "rebuild");
+            var rebuild = RunWhyso(dir, null, "rebuild");
             Assert.Equal(0, rebuild.ExitCode);
             Assert.Contains("Rebuilt", rebuild.StdOut);
 
-            var sessions = RunWorktree(dir, null, "sessions");
+            var sessions = RunWhyso(dir, null, "sessions");
             Assert.Equal(0, sessions.ExitCode);
             Assert.Contains(sessionId, sessions.StdOut);
 
-            var session = RunWorktree(dir, null, "session", sessionId);
+            var session = RunWhyso(dir, null, "session", sessionId);
             Assert.Equal(0, session.ExitCode);
             Assert.Contains("Refactor storage layer", session.StdOut);
 
-            Assert.Equal(0, RunWorktree(dir, null, "label", sessionId, "refactor").ExitCode);
+            Assert.Equal(0, RunWhyso(dir, null, "label", sessionId, "refactor").ExitCode);
 
-            var filtered = RunWorktree(dir, null, "sessions", "--prefix", "src/");
+            var filtered = RunWhyso(dir, null, "sessions", "--prefix", "src/");
             Assert.Equal(0, filtered.ExitCode);
             Assert.Contains(sessionId, filtered.StdOut);
 
-            var search = RunWorktree(dir, null, "search", "storage");
+            var search = RunWhyso(dir, null, "search", "storage");
             Assert.Equal(0, search.ExitCode);
             Assert.Contains(sessionId, search.StdOut);
 
-            var why = RunWorktree(dir, null, "why", "file", "Store.cs");
+            var why = RunWhyso(dir, null, "why", "file", "Store.cs");
             Assert.Equal(0, why.ExitCode);
             Assert.Contains("session=", why.StdOut);
         }
@@ -262,8 +262,8 @@ public class CliIntegrationTests
         var dir = InitGitRepo();
         try
         {
-            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
-            var result = RunWorktree(dir, null, "integrate", "cursor");
+            Assert.Equal(0, RunWhyso(dir, null, "init").ExitCode);
+            var result = RunWhyso(dir, null, "integrate", "cursor");
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("Configured Cursor integration", result.StdOut);
             var hooks = File.ReadAllText(Path.Combine(dir, ".cursor", "hooks.json"));
@@ -289,7 +289,7 @@ public class CliIntegrationTests
         Process? daemon = null;
         try
         {
-            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
+            Assert.Equal(0, RunWhyso(dir, null, "init").ExitCode);
 
             var port = GetFreePort();
             var bind = $"127.0.0.1:{port}";
@@ -301,7 +301,7 @@ public class CliIntegrationTests
 
             daemon = Process.Start(new ProcessStartInfo
             {
-                FileName = WorktreeBin(),
+                FileName = WhysoBin(),
                 WorkingDirectory = dir,
                 ArgumentList = { "daemon" },
                 RedirectStandardOutput = true,
@@ -375,7 +375,7 @@ public class CliIntegrationTests
 
             foreach (var hook in hooks)
             {
-                var result = RunWorktree(dir, hook.ToJsonString(), "hook", "cursor");
+                var result = RunWhyso(dir, hook.ToJsonString(), "hook", "cursor");
                 Assert.Equal(0, result.ExitCode);
                 Assert.Contains("{}", result.StdOut);
             }
@@ -398,14 +398,14 @@ public class CliIntegrationTests
                 resp.EnsureSuccessStatusCode();
             }
 
-            var sessions = RunWorktree(dir, null, "sessions");
+            var sessions = RunWhyso(dir, null, "sessions");
             Assert.Equal(0, sessions.ExitCode);
             Assert.Contains(sessionId, sessions.StdOut);
             Assert.Contains("cursor", sessions.StdOut);
             // Post-end test.completed reopens the completed conversation.
             Assert.Contains("active", sessions.StdOut);
 
-            var events = RunWorktree(dir, null, "events", sessionId);
+            var events = RunWhyso(dir, null, "events", sessionId);
             Assert.Equal(0, events.ExitCode);
             void Require(string needle) =>
                 Assert.True(
@@ -429,7 +429,7 @@ public class CliIntegrationTests
             Assert.Contains("file.modified", contents);
             Assert.Contains("prompt.submitted", contents);
 
-            var status = RunWorktree(dir, null, "status");
+            var status = RunWhyso(dir, null, "status");
             Assert.Equal(0, status.ExitCode);
             Assert.Contains("Sessions : 1", status.StdOut);
             Assert.Contains("Prompts :", status.StdOut);
@@ -457,7 +457,7 @@ public class CliIntegrationTests
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, ".claude"));
-            var (code, stdout, _) = RunWorktree(dir, null, "init");
+            var (code, stdout, _) = RunWhyso(dir, null, "init");
             Assert.Equal(0, code);
             Assert.Contains("Claude Code", stdout);
             var settings = File.ReadAllText(Path.Combine(dir, ".claude", "settings.json"));
@@ -475,13 +475,13 @@ public class CliIntegrationTests
         var dir = InitGitRepo();
         try
         {
-            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
+            Assert.Equal(0, RunWhyso(dir, null, "init").ExitCode);
             var bind = $"127.0.0.1:{GetFreePort()}";
             var configPath = Path.Combine(dir, ".whyso", "config.toml");
             File.WriteAllText(configPath, string.Join("\n", File.ReadAllText(configPath).Split('\n').Select(line =>
                 line.TrimStart().StartsWith("bind") ? $"bind = \"{bind}\"" : line.TrimEnd('\r'))));
 
-            Assert.Contains("not running", RunWorktree(dir, null, "status").StdOut);
+            Assert.Contains("not running", RunWhyso(dir, null, "status").StdOut);
 
             // No daemon yet: the hook has to start one, deliver the event, and still return.
             var hook = new JsonObject
@@ -490,23 +490,23 @@ public class CliIntegrationTests
                 ["conversation_id"] = "autostart",
                 ["workspace_roots"] = new JsonArray(JsonValue.Create(dir)),
             };
-            var result = RunWorktree(dir, hook.ToJsonString(), "hook", "cursor");
+            var result = RunWhyso(dir, hook.ToJsonString(), "hook", "cursor");
             Assert.Equal(0, result.ExitCode);
 
-            var status = RunWorktree(dir, null, "status").StdOut;
+            var status = RunWhyso(dir, null, "status").StdOut;
             Assert.Contains("Daemon : running", status);
             Assert.Contains("Sessions : 1", status);
             Assert.True(File.Exists(Path.Combine(dir, ".whyso", "daemon.pid")));
 
-            var stop = RunWorktree(dir, null, "daemon", "stop");
+            var stop = RunWhyso(dir, null, "daemon", "stop");
             Assert.Equal(0, stop.ExitCode);
             Assert.Contains("Stopped Whyso daemon", stop.StdOut);
-            Assert.Contains("not running", RunWorktree(dir, null, "status").StdOut);
+            Assert.Contains("not running", RunWhyso(dir, null, "status").StdOut);
             Assert.False(File.Exists(Path.Combine(dir, ".whyso", "daemon.pid")));
         }
         finally
         {
-            try { RunWorktree(dir, null, "daemon", "stop"); } catch { /* ignore */ }
+            try { RunWhyso(dir, null, "daemon", "stop"); } catch { /* ignore */ }
             try { Directory.Delete(dir, true); } catch { /* ignore */ }
         }
     }

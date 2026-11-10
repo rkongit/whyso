@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAppData } from '../AppData'
-import worktreeIcon from '../assets/whyso-icon.png'
+import whysoIcon from '../assets/whyso-icon.png'
 
 const NAV = [
   {
@@ -25,7 +25,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img className="brand-mark" src={worktreeIcon} alt="Whyso" width={28} height={28} />
+        <img className="brand-mark" src={whysoIcon} alt="Whyso" width={28} height={28} />
         <span>Whyso</span>
       </div>
 

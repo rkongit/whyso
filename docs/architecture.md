@@ -137,7 +137,7 @@ sending) is the seam for a self-hosted collector.
 ```text
 .whyso/
 ├── config.toml
-├── worktree.db
+├── whyso.db
 ├── keys/<session_id>.key
 └── events/
     └── YYYY/MM/DD/<session_id>.jsonl
@@ -147,9 +147,6 @@ sending) is the seam for a self-hosted collector.
 - **SQLite** is an indexed, queryable projection of the same stream.
 - Storage is append-only. Historical events are never rewritten.
 - Duplicate `event_id` values are idempotent (no second sequence / JSONL line).
-- Before the rename the directory was `.ai-worktree/`. `Store.OpenAsync` /
-  `InitProjectAsync` move it to `.whyso/`; if the move fails (a file is held
-  open), the legacy directory keeps being used and a warning is printed.
 
 Write path:
 
@@ -204,7 +201,7 @@ up to 5 seconds for it. `WHYSO_NO_AUTOSTART=1` disables this.
 ### Claude Code
 
 `whyso integrate claude-code` merges hooks into `.claude/settings.json`
-(idempotent; replaces earlier whyso/worktree entries, keeps other hooks). Each
+(idempotent; replaces earlier whyso entries, keeps other hooks). Each
 invokes `whyso hook claude-code`. One hook can produce several events:
 
 | Hook | Events |

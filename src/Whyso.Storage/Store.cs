@@ -79,9 +79,8 @@ public sealed partial class Store : IDisposable
     public static async Task<(string Root, Config Config)> InitProjectAsync(string cwd)
     {
         var root = Git.DetectGitRoot(cwd);
-        WorktreePaths.TryMigrateLegacyDir(root);
-        Directory.CreateDirectory(WorktreePaths.WorktreeDir(root));
-        Directory.CreateDirectory(WorktreePaths.EventsDir(root));
+        Directory.CreateDirectory(WhysoPaths.WhysoDir(root));
+        Directory.CreateDirectory(WhysoPaths.EventsDir(root));
 
         await using var store = await OpenAsync(root);
 
@@ -98,7 +97,7 @@ public sealed partial class Store : IDisposable
                 config = Config.New(existing.Id);
             }
 
-            if (!File.Exists(WorktreePaths.ConfigPath(root)))
+            if (!File.Exists(WhysoPaths.ConfigPath(root)))
             {
                 Config.Save(root, config);
             }
@@ -111,7 +110,7 @@ public sealed partial class Store : IDisposable
             Config.Save(root, Config.New(projectId));
         }
 
-        if (!File.Exists(WorktreePaths.ConfigPath(root)))
+        if (!File.Exists(WhysoPaths.ConfigPath(root)))
         {
             var projectId = (await store.FindProjectByRootAsync(root))?.Id
                 ?? $"proj_{Guid.NewGuid():D}";
@@ -123,15 +122,14 @@ public sealed partial class Store : IDisposable
 
     public static async Task<Store> OpenAsync(string root)
     {
-        WorktreePaths.TryMigrateLegacyDir(root);
-        if (!Directory.Exists(WorktreePaths.WorktreeDir(root)))
+        if (!Directory.Exists(WhysoPaths.WhysoDir(root)))
         {
             throw StorageException.NotInitialized();
         }
 
-        Directory.CreateDirectory(WorktreePaths.EventsDir(root));
+        Directory.CreateDirectory(WhysoPaths.EventsDir(root));
 
-        var dbPath = WorktreePaths.WorktreeDbPath(root);
+        var dbPath = WhysoPaths.DbPath(root);
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = dbPath,

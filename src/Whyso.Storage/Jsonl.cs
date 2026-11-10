@@ -8,7 +8,7 @@ public static class Jsonl
     {
         var utc = timestamp.ToUniversalTime();
         return Path.Combine(
-            WorktreePaths.EventsDir(root),
+            WhysoPaths.EventsDir(root),
             utc.Year.ToString("D4"),
             utc.Month.ToString("D2"),
             utc.Day.ToString("D2"),

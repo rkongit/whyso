@@ -244,8 +244,7 @@ public static class ClaudeCodeAdapter
 
     /// <summary>
     /// Merges Whyso hooks into a Claude Code settings object (usually <c>.claude/settings.json</c>).
-    /// Idempotent: earlier Whyso (or pre-rename Worktree) entries are replaced, other hooks and
-    /// settings are kept.
+    /// Idempotent: earlier Whyso entries are replaced, other hooks and settings are kept.
     /// </summary>
     public static JsonObject MergeSettings(JsonNode? existing, string command)
     {

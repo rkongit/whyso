@@ -31,7 +31,7 @@ public sealed class Config
 
     public static Config Load(string root)
     {
-        var path = WorktreePaths.ConfigPath(root);
+        var path = WhysoPaths.ConfigPath(root);
         if (!File.Exists(path))
         {
             throw StorageException.NotInitialized();
@@ -73,7 +73,7 @@ public sealed class Config
             ["context_on_session_start"] = config.ContextOnSessionStart,
             ["git_notes"] = config.GitNotes,
         };
-        File.WriteAllText(WorktreePaths.ConfigPath(root), Toml.FromModel(table));
+        File.WriteAllText(WhysoPaths.ConfigPath(root), Toml.FromModel(table));
     }
 
     /// <summary>Sets a key from <see cref="BoolKeys"/>. Returns false for an unknown key.</summary>
