@@ -22,7 +22,7 @@ public static class WorkNodeIndex
             .ToList();
         var edges = await store.ListWorkNodeEdgesAsync(session.Id);
         var node = WorkNodeBuilder.Build(session, timeline, labels, edges);
-        var projection = WorkNodeBuilder.ToProjection(node);
+        var projection = WorkNodeBuilder.ToProjection(node, events.Count);
         await store.UpsertWorkNodeProjectionAsync(projection);
         return node;
     }
@@ -38,6 +38,35 @@ public static class WorkNodeIndex
         }
 
         await RebuildAutoEdgesAsync(store, gitRoot);
+        return count;
+    }
+
+    /// <summary>
+    /// Projects sessions that have no Work Node yet or that received events since they were last
+    /// projected. Hooks only trigger a projection on session end, which agents such as Cursor may
+    /// send late or never, so read paths call this to keep in-flight sessions visible.
+    /// </summary>
+    public static async Task<int> RefreshStaleAsync(Store store, string gitRoot)
+    {
+        var staleIds = await store.ListStaleWorkNodeSessionIdsAsync();
+        var count = 0;
+        foreach (var id in staleIds)
+        {
+            var session = await store.GetSessionAsync(id);
+            if (session is null)
+            {
+                continue;
+            }
+
+            await ProjectSessionAsync(store, session);
+            count++;
+        }
+
+        if (count > 0)
+        {
+            await RebuildAutoEdgesAsync(store, gitRoot);
+        }
+
         return count;
     }
 

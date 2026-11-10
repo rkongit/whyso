@@ -94,7 +94,7 @@ public static class WorkNodeBuilder
         };
     }
 
-    public static WorkNodeProjection ToProjection(WorkNode node)
+    public static WorkNodeProjection ToProjection(WorkNode node, int eventCount = 0)
     {
         var excerpt = node.Prompts.FirstOrDefault() ?? "";
         if (excerpt.Length > 160)
@@ -197,6 +197,7 @@ public static class WorkNodeBuilder
 
         return new WorkNodeProjection
         {
+            EventCount = eventCount,
             Node = new WorkNodeRecord
             {
                 Id = node.Id,

@@ -78,6 +78,9 @@ public sealed class WorkNodeFtsDocument
 public sealed class WorkNodeProjection
 {
     public required WorkNodeRecord Node { get; init; }
+
+    /// <summary>Number of session events this projection was built from (staleness marker).</summary>
+    public int EventCount { get; init; }
     public IReadOnlyList<WorkNodeFileRecord> Files { get; init; } = [];
     public IReadOnlyList<WorkNodeCommandRecord> Commands { get; init; } = [];
     public IReadOnlyList<WorkNodeTestRecord> Tests { get; init; } = [];
