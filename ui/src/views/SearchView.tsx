@@ -60,7 +60,7 @@ export function SearchView() {
       <div className="page-header">
         <div>
           <h1>Search</h1>
-          <p>Search prompts, files, commits, activities — <code>worktree search</code>.</p>
+          <p>Search prompts, files, commits, activities — <code>whyso search</code>.</p>
         </div>
       </div>
 
@@ -99,7 +99,7 @@ export function SearchView() {
       </div>
 
       <div className="cli-hint" style={{ marginBottom: 12 }}>
-        worktree search {q || '<query>'}
+        whyso search {q || '<query>'}
         {type ? ` --type ${type}` : ''}
         {from ? ` --from ${from}` : ''}
       </div>
@@ -116,7 +116,7 @@ export function SearchView() {
           <div className="empty">
             {params.get('q') ? 'No hits' : 'Enter a query'}
             <br />
-            <code>worktree search &quot;…&quot;</code>
+            <code>whyso search &quot;…&quot;</code>
           </div>
         ) : (
           <div className="table-wrap">

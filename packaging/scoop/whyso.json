@@ -1,0 +1,21 @@
+{
+    "version": "{{VERSION}}",
+    "description": "Local provenance for AI-assisted coding: why every change was made",
+    "homepage": "https://github.com/{{REPO}}",
+    "license": "Apache-2.0",
+    "architecture": {
+        "64bit": {
+            "url": "{{BASE_URL}}/whyso-{{VERSION}}-win-x64.zip",
+            "hash": "{{SHA_WIN_X64}}"
+        }
+    },
+    "bin": "whyso.exe",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/{{REPO}}/releases/download/v$version/whyso-$version-win-x64.zip"
+            }
+        }
+    }
+}

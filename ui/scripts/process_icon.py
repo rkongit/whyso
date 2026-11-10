@@ -78,7 +78,7 @@ img = square
 print("final", img.size)
 
 root = Path(r"c:\Users\adars\OneDrive\Documents\personal_projects\work-tree\ui")
-out_icon = root / "src" / "assets" / "worktree-icon.png"
+out_icon = root / "src" / "assets" / "whyso-icon.png"
 out_fav = root / "public" / "favicon.png"
 img.save(out_icon, "PNG")
 img.save(out_fav, "PNG")

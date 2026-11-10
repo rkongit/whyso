@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAppData } from '../AppData'
-import worktreeIcon from '../assets/worktree-icon.png'
+import worktreeIcon from '../assets/whyso-icon.png'
 
 const NAV = [
   {
@@ -25,8 +25,8 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img className="brand-mark" src={worktreeIcon} alt="Worktree" width={28} height={28} />
-        <span>Worktree</span>
+        <img className="brand-mark" src={worktreeIcon} alt="Whyso" width={28} height={28} />
+        <span>Whyso</span>
       </div>
 
       {NAV.map((g) => (
@@ -50,7 +50,7 @@ export function Sidebar() {
         {status ? (
           <>
             <div className="mono">{status.sessionCount} sessions</div>
-            <div className="mono">{status.eventCount} events</div>
+            <div className="mono">{status.promptCount} prompts</div>
           </>
         ) : (
           <div>Loading…</div>

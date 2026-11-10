@@ -74,7 +74,7 @@ export function WhyView() {
       <div className="page-header">
         <div>
           <h1>Why</h1>
-          <p>Trace a commit or file back to prompts — <code>worktree why</code>.</p>
+          <p>Trace a commit or file back to prompts — <code>whyso why</code>.</p>
         </div>
       </div>
 
@@ -134,8 +134,8 @@ export function WhyView() {
 
       <div className="cli-hint" style={{ marginBottom: 12 }}>
         {mode === 'commit'
-          ? `worktree why commit ${sha || '<sha>'}`
-          : `worktree why file ${path || '<path>'}${lines ? ` --lines ${lines}` : ''}`}
+          ? `whyso why commit ${sha || '<sha>'}`
+          : `whyso why file ${path || '<path>'}${lines ? ` --lines ${lines}` : ''}`}
       </div>
 
       {error && <div className="error-banner">{error}</div>}

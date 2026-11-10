@@ -109,7 +109,7 @@ export function Inspector({ nodeId, detail, edges, onClose, onChanged }: Props) 
             Add
           </button>
         </div>
-        <div className="cli-hint">worktree label {nodeId} …</div>
+        <div className="cli-hint">whyso label {nodeId} …</div>
       </div>
 
       <div className="section">
@@ -143,7 +143,7 @@ export function Inspector({ nodeId, detail, edges, onClose, onChanged }: Props) 
             Link
           </button>
         </div>
-        <div className="cli-hint">worktree link {nodeId} &lt;to&gt;</div>
+        <div className="cli-hint">whyso link {nodeId} &lt;to&gt;</div>
       </div>
 
       <div className="section">

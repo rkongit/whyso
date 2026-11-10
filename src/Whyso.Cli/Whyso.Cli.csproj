@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>whyso</AssemblyName>
+    <RootNamespace>Whyso.Cli</RootNamespace>
+    <!-- Single-file publish must unpack native SQLite (e_sqlite3). -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Whyso.Events\Whyso.Events.csproj" />
+    <ProjectReference Include="..\Whyso.Storage\Whyso.Storage.csproj" />
+    <ProjectReference Include="..\Whyso.Daemon\Whyso.Daemon.csproj" />
+    <ProjectReference Include="..\Whyso.Adapter.Cursor\Whyso.Adapter.Cursor.csproj" />
+    <ProjectReference Include="..\Whyso.Activities\Whyso.Activities.csproj" />
+    <ProjectReference Include="..\Whyso.Ui\Whyso.Ui.csproj" />
+    <ProjectReference Include="..\Whyso.Adapter.ClaudeCode\Whyso.Adapter.ClaudeCode.csproj" />
+  </ItemGroup>
+
+</Project>

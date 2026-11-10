@@ -114,7 +114,7 @@ export function TreeView() {
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="tree-toolbar">
             <strong>Work Tree</strong>
-            <span className="muted">worktree tree{from ? ` --from ${from}` : ''}</span>
+            <span className="muted">whyso tree{from ? ` --from ${from}` : ''}</span>
             <div style={{ flex: 1 }} />
             <input
               className="inline-input"
@@ -182,7 +182,7 @@ export function TreeView() {
             <div className="cli-hint" style={{ padding: '8px 12px' }}>
               {linkFrom
                 ? `Select target to link from ${linkFrom}`
-                : 'Select source node, then target (worktree link)'}
+                : 'Select source node, then target (whyso link)'}
             </div>
           )}
         </div>

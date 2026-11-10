@@ -1,0 +1,116 @@
+name: release
+
+# Builds self-contained whyso binaries for Windows, Linux and macOS on a version tag,
+# publishes them to a GitHub Release, and renders Homebrew/Scoop manifests as assets.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build without publishing a release (e.g. 0.2.0-test)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64, ext: zip }
+          - { os: ubuntu-latest, rid: linux-x64, ext: tar.gz }
+          - { os: macos-14, rid: osx-arm64, ext: tar.gz }
+          - { os: macos-13, rid: osx-x64, ext: tar.gz }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: v
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then v="${{ inputs.version }}"; else v="${GITHUB_REF_NAME#v}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build UI into wwwroot
+        working-directory: ui
+        run: npm ci && npm run build
+
+      - name: Test
+        run: dotnet test Whyso.sln -c Release
+
+      - name: Publish
+        run: >
+          dotnet publish src/Whyso.Cli/Whyso.Cli.csproj -c Release -r ${{ matrix.rid }}
+          --self-contained true -p:PublishSingleFile=true
+          -p:Version=${{ steps.v.outputs.version }}
+          -o publish/${{ matrix.rid }}
+
+      - name: Archive
+        id: archive
+        run: |
+          name="whyso-${{ steps.v.outputs.version }}-${{ matrix.rid }}"
+          cd publish/${{ matrix.rid }}
+          rm -f *.pdb
+          if [ "${{ matrix.ext }}" = "zip" ]; then
+            7z a -tzip "../../$name.zip" . > /dev/null
+          else
+            chmod +x whyso
+            tar -czf "../../$name.tar.gz" .
+          fi
+          echo "file=$name.${{ matrix.ext }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: ${{ steps.archive.outputs.file }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums and package manifests
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cd dist
+          sha256sum whyso-* > SHA256SUMS.txt
+          sha() { grep " whyso-$version-$1\." SHA256SUMS.txt | cut -d' ' -f1; }
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          for tpl in ../packaging/homebrew/whyso.rb ../packaging/scoop/whyso.json; do
+            sed -e "s|{{VERSION}}|$version|g" \
+                -e "s|{{BASE_URL}}|$base|g" \
+                -e "s|{{REPO}}|${GITHUB_REPOSITORY}|g" \
+                -e "s|{{SHA_WIN_X64}}|$(sha win-x64)|g" \
+                -e "s|{{SHA_LINUX_X64}}|$(sha linux-x64)|g" \
+                -e "s|{{SHA_OSX_ARM64}}|$(sha osx-arm64)|g" \
+                -e "s|{{SHA_OSX_X64}}|$(sha osx-x64)|g" \
+                "$tpl" > "$(basename "$tpl")"
+          done
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "Whyso $GITHUB_REF_NAME" --generate-notes
