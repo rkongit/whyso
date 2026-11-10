@@ -439,10 +439,9 @@ public static class UiHost
 
     private static void MapSpa(WebApplication app)
     {
-        var wwwroot = ResolveWwwRoot();
-        if (wwwroot is not null)
+        var provider = EmbeddedUi();
+        if (provider is not null)
         {
-            var provider = new PhysicalFileProvider(wwwroot);
             app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = provider });
             app.UseStaticFiles(new StaticFileOptions { FileProvider = provider });
             app.MapFallback(async ctx =>
@@ -454,16 +453,8 @@ public static class UiHost
                     return;
                 }
 
-                var index = Path.Combine(wwwroot, "index.html");
-                if (!File.Exists(index))
-                {
-                    ctx.Response.StatusCode = 404;
-                    await ctx.Response.WriteAsync("UI assets not found. Build the React app into wwwroot (see README).");
-                    return;
-                }
-
                 ctx.Response.ContentType = "text/html; charset=utf-8";
-                await ctx.Response.SendFileAsync(index);
+                await ctx.Response.SendFileAsync(provider.GetFileInfo("index.html"));
             });
         }
         else
@@ -474,7 +465,7 @@ public static class UiHost
                 <html><head><title>Whyso</title></head>
                 <body style="font-family:system-ui;background:#121212;color:#e5e5e5;padding:2rem">
                   <h1>Whyso Explorer</h1>
-                  <p>API is running. Build the UI with <code>npm run build</code> in <code>ui/</code> and copy to wwwroot, or run Vite in dev mode.</p>
+                  <p>API is running, but this build has no UI embedded. Run <code>npm run build</code> in <code>ui/</code> and rebuild, or run Vite in dev mode.</p>
                   <p>Try <a href="/api/v1/health" style="color:#4ade80">/api/v1/health</a> or <a href="/api/v1/sessions" style="color:#4ade80">/api/v1/sessions</a>.</p>
                 </body></html>
                 """,
@@ -482,61 +473,17 @@ public static class UiHost
         }
     }
 
-    private static string? ResolveWwwRoot()
+    /// <summary>The explorer UI embedded in this assembly, or null when it was built without one.</summary>
+    private static IFileProvider? EmbeddedUi()
     {
-        var candidates = new List<string>();
-
-        void Add(string? path)
-        {
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                candidates.Add(path);
-            }
-        }
-
         try
         {
-            var asmDir = Path.GetDirectoryName(typeof(UiHost).Assembly.Location);
-            Add(asmDir is null ? null : Path.Combine(asmDir, "wwwroot"));
+            var provider = new ManifestEmbeddedFileProvider(typeof(UiHost).Assembly, "wwwroot");
+            return provider.GetFileInfo("index.html").Exists ? provider : null;
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // ignore
+            return null;
         }
-
-        Add(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
-
-        try
-        {
-            var exe = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(exe))
-            {
-                Add(Path.Combine(Path.GetDirectoryName(exe)!, "wwwroot"));
-            }
-        }
-        catch
-        {
-            // ignore
-        }
-
-        Add(Path.Combine(Directory.GetCurrentDirectory(), "src", "Whyso.Ui", "wwwroot"));
-        Add(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"));
-
-        // Walk up from cwd for repo-layout development.
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        for (var i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
-        {
-            Add(Path.Combine(dir.FullName, "src", "Whyso.Ui", "wwwroot"));
-        }
-
-        foreach (var c in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (Directory.Exists(c) && File.Exists(Path.Combine(c, "index.html")))
-            {
-                return c;
-            }
-        }
-
-        return null;
     }
 }

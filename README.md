@@ -15,27 +15,31 @@ line exists, and tells your next agent session what was already decided.
 
 ## Install
 
-> The Homebrew tap and Scoop bucket go live with the first tagged release
-> (see [packaging/README.md](packaging/README.md)). Until then, use a release
-> archive or build from source.
+Whyso is a single self-contained binary: no runtime to install and no extra files.
 
-**macOS / Linux (Homebrew)**
+**macOS / Linux**
 
 ```bash
-brew install getwhyso/whyso/whyso
+curl -fsSL https://raw.githubusercontent.com/rkongit/whyso/main/install.sh | sh
 ```
 
-**Windows (Scoop)**
+**Windows (PowerShell)**
 
 ```powershell
-scoop bucket add whyso https://github.com/getwhyso/scoop-whyso
-scoop install whyso
+irm https://raw.githubusercontent.com/rkongit/whyso/main/install.ps1 | iex
 ```
+
+The script downloads the latest release for your platform, checks it against
+`SHA256SUMS.txt`, and puts `whyso` in `~/.local/bin` (Windows:
+`%LOCALAPPDATA%\Programs\whyso`, added to your user `PATH`). Set
+`WHYSO_VERSION` or `WHYSO_INSTALL_DIR` to change the version or location.
 
 **Manual:** download the archive for your platform (`win-x64`, `linux-x64`,
 `osx-arm64`, `osx-x64`) from the **[Releases](https://github.com/rkongit/whyso/releases/latest)**
-page, extract it, and put `whyso` (or `whyso.exe`) on your `PATH`. Keep the
-`wwwroot` folder next to the binary: the explorer UI is served from it.
+page, extract it, and put `whyso` (or `whyso.exe`) on your `PATH`.
+
+> A Homebrew tap and Scoop bucket are planned
+> (see [packaging/README.md](packaging/README.md)).
 
 ### From source
 
@@ -59,15 +63,21 @@ Inside any Git project:
 
 ```bash
 whyso init
-whyso integrate claude-code   # and/or: whyso integrate cursor
-whyso daemon
 ```
 
-Keep the daemon running and use your agent normally. Hooks forward each event
-to the daemon; there is no manual entry. If the daemon is down, the agent
-carries on unaffected.
+That is the whole setup. `init` creates `.whyso/` and installs hooks for the
+agents it finds (Claude Code and/or Cursor, detected from a `.claude` /
+`.cursor` folder in the project or your home directory). Then start a new agent
+session and work as usual: hooks forward each event to a small local daemon,
+which the first hook starts in the background. If the daemon cannot start, the
+agent carries on unaffected.
 
-In another terminal:
+To hook up an agent `init` did not detect, run `whyso integrate claude-code` or
+`whyso integrate cursor`. To stop the background daemon, run
+`whyso daemon stop`; it starts again on the next agent event (set
+`WHYSO_NO_AUTOSTART=1` to prevent that and run `whyso daemon` yourself).
+
+Then explore what was captured:
 
 ```bash
 whyso sessions
@@ -93,7 +103,7 @@ was decided, and which approaches were rejected ("don't use Redis", "reverted
 the ORM change"), with the files and commits involved. It is extracted
 heuristically from your local history, with no LLM involved.
 
-With `whyso integrate claude-code`, the brief is injected automatically when a
+With the Claude Code hooks installed, the brief is injected automatically when a
 Claude Code session starts, so the agent doesn't retry an approach you already
 turned down. To turn that off:
 
@@ -124,7 +134,8 @@ session keys.
 ## Provenance in Git (opt-in)
 
 ```bash
-whyso config set git.notes true   # then restart `whyso daemon`
+whyso config set git.notes true
+whyso daemon stop                 # it restarts with the new setting on the next event
 whyso notes write                 # backfill notes for commits already captured
 git push origin refs/notes/whyso  # share them
 ```
@@ -185,8 +196,9 @@ See [docs/architecture.md](docs/architecture.md).
 
 | Command | Description |
 | --- | --- |
-| `whyso init` | Create `.whyso/` (idempotent; migrates `.ai-worktree/`) |
-| `whyso daemon` | Start the local collector (`127.0.0.1:9477`) |
+| `whyso init` | Create `.whyso/` and install hooks for detected agents (idempotent; migrates `.ai-worktree/`) |
+| `whyso daemon` | Run the local collector in the foreground (`127.0.0.1:9477`); hooks normally start it for you |
+| `whyso daemon stop` | Stop this project's collector |
 | `whyso status` | Project + daemon status |
 | `whyso sessions [--file] [--prefix] [--json]` | List sessions (projections, labels, files, edges) |
 | `whyso session <id> [--json]` | Inspect a session (prompts, activities, files, git) |
@@ -230,7 +242,8 @@ dotnet run --project src/Whyso.Cli -- ui --port 9478 --open false
 cd ui && npm install && npm run dev   # http://127.0.0.1:5173 proxies /api → :9478
 ```
 
-Production assets (copied into `src/Whyso.Ui/wwwroot`):
+Production assets (built into `src/Whyso.Ui/wwwroot`, which is embedded in the
+binary at build time):
 
 ```bash
 cd ui && npm run build

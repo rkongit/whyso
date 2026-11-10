@@ -26,15 +26,4 @@
     <ProjectReference Include="..\Whyso.Adapter.ClaudeCode\Whyso.Adapter.ClaudeCode.csproj" />
   </ItemGroup>
 
-  <Target Name="CopyUiWwwroot" AfterTargets="Build;Publish">
-    <PropertyGroup>
-      <_WwwrootDest Condition="'$(PublishDir)' != ''">$(PublishDir)wwwroot\</_WwwrootDest>
-      <_WwwrootDest Condition="'$(PublishDir)' == ''">$(OutputPath)wwwroot\</_WwwrootDest>
-    </PropertyGroup>
-    <ItemGroup>
-      <_UiWwwrootFiles Include="..\Whyso.Ui\wwwroot\**\*" Condition="Exists('..\Whyso.Ui\wwwroot\index.html')" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_UiWwwrootFiles)" DestinationFiles="@(_UiWwwrootFiles->'$(_WwwrootDest)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(_UiWwwrootFiles)' != ''" />
-  </Target>
-
 </Project>

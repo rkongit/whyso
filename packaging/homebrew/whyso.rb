@@ -26,9 +26,7 @@ class Whyso < Formula
   end
 
   def install
-    # The binary looks for the explorer UI in a wwwroot folder next to itself.
-    libexec.install Dir["*"]
-    bin.install_symlink libexec/"whyso"
+    bin.install "whyso"
   end
 
   test do

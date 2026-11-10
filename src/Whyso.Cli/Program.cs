@@ -1,6 +1,7 @@
 ﻿using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
@@ -112,7 +113,7 @@ public static class Program
 
     private static Command BuildInit()
     {
-        var cmd = new Command("init", "Initialize Whyso in the current Git project");
+        var cmd = new Command("init", "Initialize Whyso in the current Git project and hook up your coding agents");
         cmd.SetHandler(async () =>
         {
             var cwd = Directory.GetCurrentDirectory();
@@ -123,23 +124,113 @@ public static class Program
             Console.WriteLine("  events   : .whyso/events/");
             Console.WriteLine("  config   : .whyso/config.toml");
             Console.WriteLine($"  project  : {config.ProjectId}");
-            Console.WriteLine($"  daemon   : {config.Bind}");
+            Console.WriteLine($"  daemon   : {config.Bind} (starts itself on the first agent event)");
+
+            var hooked = false;
+            if (AgentDetected(root, ".claude"))
+            {
+                var settingsPath = IntegrateClaudeCode(root).SettingsPath;
+                Console.WriteLine($"  hooks    : Claude Code ({Path.GetRelativePath(root, settingsPath)})");
+                hooked = true;
+            }
+
+            if (AgentDetected(root, ".cursor"))
+            {
+                var hooksPath = IntegrateCursor(root).HooksPath;
+                Console.WriteLine($"  hooks    : Cursor ({Path.GetRelativePath(root, hooksPath)})");
+                hooked = true;
+            }
+
             Console.WriteLine();
-            Console.WriteLine("Next steps:");
-            Console.WriteLine("  whyso integrate cursor");
-            Console.WriteLine("  whyso daemon");
+            if (hooked)
+            {
+                Console.WriteLine("Start a new agent session here and work as usual, then check: whyso sessions");
+            }
+            else
+            {
+                Console.WriteLine("No Claude Code or Cursor setup found. Hook up your agent with one of:");
+                Console.WriteLine("  whyso integrate claude-code");
+                Console.WriteLine("  whyso integrate cursor");
+            }
         });
         return cmd;
     }
 
+    /// <summary>True when the project or the user's home directory has this agent's config folder.</summary>
+    private static bool AgentDetected(string root, string dirName)
+    {
+        if (Directory.Exists(Path.Combine(root, dirName)))
+        {
+            return true;
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return !string.IsNullOrEmpty(home) && Directory.Exists(Path.Combine(home, dirName));
+    }
+
+    private static (string HooksPath, string Command, string Bin) IntegrateCursor(string root)
+    {
+        var cursorDir = Path.Combine(root, ".cursor");
+        Directory.CreateDirectory(cursorDir);
+        var hooksPath = Path.Combine(cursorDir, "hooks.json");
+
+        JsonNode? existing = null;
+        if (File.Exists(hooksPath))
+        {
+            existing = JsonNode.Parse(File.ReadAllText(hooksPath));
+        }
+
+        var bin = ResolveWorktreeBin();
+        InstallWrapper(root, bin);
+        var command = CursorAdapter.CursorHookCommand(bin);
+        var merged = CursorAdapter.MergeCursorHooks(existing, command);
+        var pretty = JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(hooksPath, pretty + "\n");
+        return (hooksPath, command, bin);
+    }
+
+    private static (string SettingsPath, string Command) IntegrateClaudeCode(string root)
+    {
+        var claudeDir = Path.Combine(root, ".claude");
+        Directory.CreateDirectory(claudeDir);
+        var settingsPath = Path.Combine(claudeDir, "settings.json");
+
+        JsonNode? existing = null;
+        if (File.Exists(settingsPath))
+        {
+            existing = JsonNode.Parse(File.ReadAllText(settingsPath));
+        }
+
+        var command = ClaudeCodeAdapter.HookCommand(ResolveWorktreeBin());
+        var merged = ClaudeCodeAdapter.MergeSettings(existing, command);
+        File.WriteAllText(
+            settingsPath,
+            JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        return (settingsPath, command);
+    }
+
     private static Command BuildDaemon(ILoggerFactory loggerFactory)
     {
-        var cmd = new Command("daemon", "Start the local event collector daemon");
+        var backgroundOpt = new Option<bool>("--background", "Run without console output (used when a hook starts the daemon)")
+        {
+            IsHidden = true,
+        };
+        var cmd = new Command("daemon", "Start the local event collector daemon (hooks start it for you)")
+        {
+            backgroundOpt,
+        };
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
             _ = loggerFactory;
+            string? pidPath = null;
             try
             {
+                if (ctx.ParseResult.GetValueForOption(backgroundOpt))
+                {
+                    Console.SetOut(TextWriter.Null);
+                    Console.SetError(TextWriter.Null);
+                }
+
                 var (root, config, store) = await OpenStoreAsync();
                 store.WriteGitNotes = config.GitNotes;
                 var state = new AppState { Store = store, Config = config };
@@ -149,8 +240,59 @@ public static class Program
                     Console.WriteLine($"Git notes: on (refs/notes/{Git.NotesRef})");
                 }
                 Console.WriteLine("POST /v1/events  GET /v1/health");
-                Console.WriteLine("Press Ctrl+C to stop.");
-                await DaemonHost.ServeAsync(state, config.Bind);
+                Console.WriteLine("Press Ctrl+C to stop, or run `whyso daemon stop`.");
+                pidPath = DaemonPidPath(root);
+                await DaemonHost.ServeAsync(
+                    state,
+                    config.Bind,
+                    onStarted: () => File.WriteAllText(pidPath, Environment.ProcessId.ToString()));
+            }
+            catch (Exception ex)
+            {
+                WriteCliError(ex);
+                ctx.ExitCode = 1;
+            }
+            finally
+            {
+                RemoveOwnPidFile(pidPath);
+            }
+        });
+
+        var stop = new Command("stop", "Stop the daemon running for this project");
+        stop.SetHandler((InvocationContext ctx) =>
+        {
+            try
+            {
+                var root = WorktreePaths.FindWorktreeRoot(Directory.GetCurrentDirectory());
+                var pidPath = DaemonPidPath(root);
+                if (!File.Exists(pidPath)
+                    || !int.TryParse(File.ReadAllText(pidPath).Trim(), out var pid))
+                {
+                    Console.WriteLine("Daemon is not running.");
+                    return;
+                }
+
+                try
+                {
+                    using var process = Process.GetProcessById(pid);
+                    // A recycled pid could belong to anything; only stop our own binary.
+                    if (!IsWhysoProcess(process))
+                    {
+                        Console.WriteLine("Daemon is not running (stale pid file removed).");
+                    }
+                    else
+                    {
+                        process.Kill();
+                        process.WaitForExit(5000);
+                        Console.WriteLine($"Stopped Whyso daemon (pid {pid}).");
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    Console.WriteLine("Daemon is not running (stale pid file removed).");
+                }
+
+                DeleteIfExists(pidPath);
             }
             catch (Exception ex)
             {
@@ -158,7 +300,134 @@ public static class Program
                 ctx.ExitCode = 1;
             }
         });
+        cmd.AddCommand(stop);
         return cmd;
+    }
+
+    private static string DaemonPidPath(string root) =>
+        Path.Combine(WorktreePaths.WorktreeDir(root), "daemon.pid");
+
+    private static void RemoveOwnPidFile(string? pidPath)
+    {
+        try
+        {
+            if (pidPath is not null
+                && File.Exists(pidPath)
+                && File.ReadAllText(pidPath).Trim() == Environment.ProcessId.ToString())
+            {
+                File.Delete(pidPath);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private static bool IsWhysoProcess(Process process)
+    {
+        try
+        {
+            using var self = Process.GetCurrentProcess();
+            return string.Equals(process.ProcessName, self.ProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Called by hooks: if nothing is listening on the project's daemon address, start
+    /// <c>whyso daemon --background</c> detached and wait briefly for it. Never throws.
+    /// Set <c>WHYSO_NO_AUTOSTART=1</c> to turn this off.
+    /// </summary>
+    private static void EnsureDaemonRunning(string? root, string? logPath)
+    {
+        if (root is null || Environment.GetEnvironmentVariable("WHYSO_NO_AUTOSTART") is "1" or "true")
+        {
+            return;
+        }
+
+        try
+        {
+            var config = Config.Load(root);
+            if (!IPEndPoint.TryParse(config.Bind, out var endpoint) || CanConnect(endpoint, 250))
+            {
+                return;
+            }
+
+            StartDaemonDetached(root);
+            var waited = Stopwatch.StartNew();
+            while (waited.ElapsedMilliseconds < 5000)
+            {
+                if (CanConnect(endpoint, 250))
+                {
+                    HookSupport.AppendLog(logPath, $"started daemon on {config.Bind}");
+                    return;
+                }
+
+                Thread.Sleep(100);
+            }
+
+            HookSupport.AppendLog(logPath, $"daemon did not come up on {config.Bind} within 5s");
+        }
+        catch (Exception ex)
+        {
+            HookSupport.AppendLog(logPath, $"daemon autostart failed: {ex.Message}");
+        }
+    }
+
+    private static bool CanConnect(IPEndPoint endpoint, int timeoutMs)
+    {
+        try
+        {
+            using var client = new TcpClient(endpoint.AddressFamily);
+            return client.ConnectAsync(endpoint.Address, endpoint.Port).Wait(timeoutMs) && client.Connected;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Starts the daemon so it outlives this hook process and holds none of its stdio pipes
+    /// (an agent waiting for the hook's stdout to close would otherwise hang).
+    /// </summary>
+    private static void StartDaemonDetached(string root)
+    {
+        var bin = ResolveWorktreeBin();
+        ProcessStartInfo psi;
+        if (OperatingSystem.IsWindows())
+        {
+            // ShellExecute does not pass our handles to the child.
+            psi = new ProcessStartInfo
+            {
+                FileName = bin,
+                Arguments = "daemon --background",
+                WorkingDirectory = root,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            };
+        }
+        else
+        {
+            psi = new ProcessStartInfo
+            {
+                FileName = "/bin/sh",
+                WorkingDirectory = root,
+                UseShellExecute = false,
+                ArgumentList =
+                {
+                    "-c",
+                    "nohup \"$0\" daemon --background >/dev/null 2>&1 </dev/null &",
+                    bin,
+                },
+            };
+        }
+
+        using var process = Process.Start(psi);
     }
 
     private static Command BuildStatus()
@@ -299,35 +568,16 @@ public static class Program
         var cursor = new Command("cursor", "Install Cursor project hooks that forward events to Whyso");
         cursor.SetHandler(() =>
         {
-            var cwd = Directory.GetCurrentDirectory();
-            var root = RequireGitRoot(cwd);
-            var cursorDir = Path.Combine(root, ".cursor");
-            Directory.CreateDirectory(cursorDir);
-            var hooksPath = Path.Combine(cursorDir, "hooks.json");
-
-            JsonNode? existing = null;
-            if (File.Exists(hooksPath))
-            {
-                existing = JsonNode.Parse(File.ReadAllText(hooksPath));
-            }
-
-            var worktreeBin = ResolveWorktreeBin();
-            InstallWrapper(root, worktreeBin);
-            var command = CursorAdapter.CursorHookCommand(worktreeBin);
-            var merged = CursorAdapter.MergeCursorHooks(existing, command);
-            var pretty = JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(hooksPath, pretty + "\n");
-
-            var rel = Path.GetRelativePath(root, hooksPath);
-            Console.WriteLine($"Configured Cursor integration at {rel}");
+            var root = RequireGitRoot(Directory.GetCurrentDirectory());
+            var (hooksPath, command, bin) = IntegrateCursor(root);
+            Console.WriteLine($"Configured Cursor integration at {Path.GetRelativePath(root, hooksPath)}");
             Console.WriteLine($"Hook command: {command}");
-            Console.WriteLine($"Whyso binary: {worktreeBin}");
+            Console.WriteLine($"Whyso binary: {bin}");
             Console.WriteLine();
             Console.WriteLine("Next steps:");
-            Console.WriteLine("  1. Keep `whyso daemon` running in this project");
-            Console.WriteLine("  2. Reload Cursor (or reopen the folder) so hooks are picked up");
-            Console.WriteLine("  3. Run an Agent chat prompt");
-            Console.WriteLine("  4. Check: whyso sessions");
+            Console.WriteLine("  1. Reload Cursor (or reopen the folder) so hooks are picked up");
+            Console.WriteLine("  2. Run an Agent chat prompt (the daemon starts itself)");
+            Console.WriteLine("  3. Check: whyso sessions");
             Console.WriteLine("     Debug:  .whyso/hooks.log  (and Cursor Output → Hooks)");
         });
         integrate.AddCommand(cursor);
@@ -338,31 +588,14 @@ public static class Program
         claudeCode.SetHandler(() =>
         {
             var root = RequireGitRoot(Directory.GetCurrentDirectory());
-            var claudeDir = Path.Combine(root, ".claude");
-            Directory.CreateDirectory(claudeDir);
-            var settingsPath = Path.Combine(claudeDir, "settings.json");
-
-            JsonNode? existing = null;
-            if (File.Exists(settingsPath))
-            {
-                existing = JsonNode.Parse(File.ReadAllText(settingsPath));
-            }
-
-            var bin = ResolveWorktreeBin();
-            var command = ClaudeCodeAdapter.HookCommand(bin);
-            var merged = ClaudeCodeAdapter.MergeSettings(existing, command);
-            File.WriteAllText(
-                settingsPath,
-                JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = true }) + "\n");
-
+            var (settingsPath, command) = IntegrateClaudeCode(root);
             Console.WriteLine($"Configured Claude Code integration at {Path.GetRelativePath(root, settingsPath)}");
             Console.WriteLine($"Hook command: {command}");
             Console.WriteLine($"Hooks: {string.Join(", ", ClaudeCodeAdapter.HookNames)}");
             Console.WriteLine();
             Console.WriteLine("Next steps:");
-            Console.WriteLine("  1. Keep `whyso daemon` running in this project");
-            Console.WriteLine("  2. Start a new Claude Code session here (SessionStart injects `whyso context`)");
-            Console.WriteLine("  3. Check: whyso sessions");
+            Console.WriteLine("  1. Start a new Claude Code session here (SessionStart injects `whyso context`; the daemon starts itself)");
+            Console.WriteLine("  2. Check: whyso sessions");
             Console.WriteLine("     Debug:  .whyso/hooks.log");
         });
         integrate.AddCommand(claudeCode);
@@ -892,7 +1125,8 @@ public static class Program
 
             var text = Encoding.UTF8.GetString(bytes);
             text = CursorAdapter.NormalizeHookStdin(text);
-            var (url, logPath) = ResolveEventsUrlAndLog(text);
+            var (url, logPath, projectRoot) = ResolveHookTarget(text);
+            EnsureDaemonRunning(projectRoot, logPath);
             var response = CursorAdapter.HandleHookStdin(text, url, logPath);
             Console.WriteLine(response.ToJsonString());
         });
@@ -906,6 +1140,7 @@ public static class Program
             {
                 var text = HookSupport.NormalizeStdin(ReadStdinUtf8());
                 var (url, logPath, projectRoot) = ResolveHookTarget(text);
+                EnsureDaemonRunning(projectRoot, logPath);
                 string? sessionId = null;
                 try
                 {
@@ -1007,7 +1242,7 @@ public static class Program
         catch (StorageException)
         {
             throw new InvalidOperationException(
-                "whyso is not initialized here (run `whyso init` inside your Git project, then `whyso daemon` from that directory)");
+                "whyso is not initialized here (run `whyso init` inside your Git project)");
         }
 
         var config = Config.Load(root);
@@ -1085,12 +1320,6 @@ public static class Program
                 // ignore
             }
         }
-    }
-
-    private static (string Url, string? LogPath) ResolveEventsUrlAndLog(string stdin)
-    {
-        var (url, logPath, _) = ResolveHookTarget(stdin);
-        return (url, logPath);
     }
 
     /// <summary>

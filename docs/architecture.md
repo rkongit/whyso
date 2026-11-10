@@ -197,6 +197,10 @@ Cursor runs project hooks from `.cursor/hooks.json`, each invoking
 `whyso hook cursor`. The adapter reads the JSON payload from stdin, maps it to
 one `AgentEvent`, `POST`s it to the daemon, and prints `{}`.
 
+Both hook entrypoints first check that the daemon is listening; if not, they
+start `whyso daemon --background` detached (pid in `.whyso/daemon.pid`) and wait
+up to 5 seconds for it. `WHYSO_NO_AUTOSTART=1` disables this.
+
 ### Claude Code
 
 `whyso integrate claude-code` merges hooks into `.claude/settings.json`

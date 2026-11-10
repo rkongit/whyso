@@ -450,6 +450,67 @@ public class CliIntegrationTests
         }
     }
 
+    [Fact]
+    public void Init_installs_hooks_for_detected_agent()
+    {
+        var dir = InitGitRepo();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dir, ".claude"));
+            var (code, stdout, _) = RunWorktree(dir, null, "init");
+            Assert.Equal(0, code);
+            Assert.Contains("Claude Code", stdout);
+            var settings = File.ReadAllText(Path.Combine(dir, ".claude", "settings.json"));
+            Assert.Contains("hook claude-code", settings);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { /* ignore */ }
+        }
+    }
+
+    [Fact]
+    public void Hook_starts_daemon_and_stop_ends_it()
+    {
+        var dir = InitGitRepo();
+        try
+        {
+            Assert.Equal(0, RunWorktree(dir, null, "init").ExitCode);
+            var bind = $"127.0.0.1:{GetFreePort()}";
+            var configPath = Path.Combine(dir, ".whyso", "config.toml");
+            File.WriteAllText(configPath, string.Join("\n", File.ReadAllText(configPath).Split('\n').Select(line =>
+                line.TrimStart().StartsWith("bind") ? $"bind = \"{bind}\"" : line.TrimEnd('\r'))));
+
+            Assert.Contains("not running", RunWorktree(dir, null, "status").StdOut);
+
+            // No daemon yet: the hook has to start one, deliver the event, and still return.
+            var hook = new JsonObject
+            {
+                ["hook_event_name"] = "sessionStart",
+                ["conversation_id"] = "autostart",
+                ["workspace_roots"] = new JsonArray(JsonValue.Create(dir)),
+            };
+            var result = RunWorktree(dir, hook.ToJsonString(), "hook", "cursor");
+            Assert.Equal(0, result.ExitCode);
+
+            var status = RunWorktree(dir, null, "status").StdOut;
+            Assert.Contains("Daemon : running", status);
+            Assert.Contains("Sessions : 1", status);
+            Assert.True(File.Exists(Path.Combine(dir, ".whyso", "daemon.pid")));
+
+            var stop = RunWorktree(dir, null, "daemon", "stop");
+            Assert.Equal(0, stop.ExitCode);
+            Assert.Contains("Stopped Whyso daemon", stop.StdOut);
+            Assert.Contains("not running", RunWorktree(dir, null, "status").StdOut);
+            Assert.False(File.Exists(Path.Combine(dir, ".whyso", "daemon.pid")));
+        }
+        finally
+        {
+            try { RunWorktree(dir, null, "daemon", "stop"); } catch { /* ignore */ }
+            try { Directory.Delete(dir, true); } catch { /* ignore */ }
+        }
+    }
+
     private static int GetFreePort()
     {
         var listener = new TcpListener(System.Net.IPAddress.Loopback, 0);

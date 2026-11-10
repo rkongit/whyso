@@ -115,7 +115,11 @@ public static class DaemonHost
         return app;
     }
 
-    public static async Task ServeAsync(AppState state, string bind, CancellationToken cancellationToken = default)
+    public static async Task ServeAsync(
+        AppState state,
+        string bind,
+        CancellationToken cancellationToken = default,
+        Action? onStarted = null)
     {
         if (!IPEndPoint.TryParse(bind, out var endpoint))
         {
@@ -125,6 +129,12 @@ public static class DaemonHost
         var app = BuildApp(state);
         app.Urls.Clear();
         app.Urls.Add($"http://{endpoint}");
+        if (onStarted is not null)
+        {
+            // Fires only once the port is bound, so a daemon that loses a start race never runs it.
+            app.Lifetime.ApplicationStarted.Register(onStarted);
+        }
+
         await app.RunAsync(cancellationToken);
     }
 }
