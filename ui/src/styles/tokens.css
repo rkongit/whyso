@@ -1,0 +1,101 @@
+/* Design tokens. Light is the default; dark overrides under [data-theme="dark"].
+   index.html sets data-theme before first paint. */
+:root {
+  color-scheme: light;
+
+  --bg: #f6f6f7;
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e8e8eb;
+  --border: #e4e4e7;
+  --border-strong: #cfcfd5;
+
+  --text-1: #18181b;
+  --text-2: #52525b;
+  --text-3: #6b6b75;
+
+  --accent: #0d9488;
+  --accent-text: #0f766e;
+  --accent-solid: #0f766e;
+  --accent-solid-hover: #115e59;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(13, 148, 136, 0.1);
+  --accent-ring: rgba(13, 148, 136, 0.35);
+
+  --success: #15803d;
+  --success-soft: rgba(21, 128, 61, 0.1);
+  --warn: #b45309;
+  --warn-soft: rgba(180, 83, 9, 0.1);
+  --danger: #b91c1c;
+  --danger-soft: rgba(185, 28, 28, 0.08);
+  --info: #0369a1;
+  --info-soft: rgba(3, 105, 161, 0.1);
+
+  --backdrop: rgba(24, 24, 27, 0.35);
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 4px 16px rgba(24, 24, 27, 0.08);
+  --shadow-lg: 0 20px 56px rgba(24, 24, 27, 0.18);
+
+  --font: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --sidebar-w: 216px;
+  --inspector-w: 328px;
+  --topbar-h: 52px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0b0d;
+  --surface-1: #121215;
+  --surface-2: #18181c;
+  --surface-3: #232329;
+  --border: #26262c;
+  --border-strong: #3a3a43;
+
+  --text-1: #ededf0;
+  --text-2: #a8a8b3;
+  --text-3: #80808c;
+
+  --accent: #2dd4bf;
+  --accent-text: #5eead4;
+  --accent-solid: #14b8a6;
+  --accent-solid-hover: #2dd4bf;
+  --on-accent: #042f2e;
+  --accent-soft: rgba(45, 212, 191, 0.12);
+  --accent-ring: rgba(45, 212, 191, 0.4);
+
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.12);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --info: #7dd3fc;
+  --info-soft: rgba(125, 211, 252, 0.12);
+
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 56px rgba(0, 0, 0, 0.6);
+}

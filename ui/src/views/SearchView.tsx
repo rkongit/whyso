@@ -1,6 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { CircleAlert, Search, SearchX } from 'lucide-react'
 import { api, type SearchHit } from '../api'
+import { CliHint } from '../components/CliHint'
+import { EmptyState } from '../components/EmptyState'
+import { SkeletonRows } from '../components/Skeleton'
+
+function highlight(text: string, query: string): ReactNode {
+  const terms = query
+    .split(/\s+/)
+    .map((t) => t.replace(/[^\p{L}\p{N}_-]/gu, ''))
+    .filter((t) => t.length > 1)
+  if (terms.length === 0) return text
+  // Terms are reduced to letters, digits, "_" and "-", so they need no regex escaping.
+  const parts = text.split(new RegExp(`(${terms.join('|')})`, 'giu'))
+  return parts.map((part, i) => (i % 2 === 1 ? <mark key={i}>{part}</mark> : part))
+}
 
 export function SearchView() {
   const [params, setParams] = useSearchParams()
@@ -10,6 +25,7 @@ export function SearchView() {
   const [hits, setHits] = useState<SearchHit[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const activeQuery = params.get('q')?.trim() ?? ''
 
   useEffect(() => {
     setQ(params.get('q') ?? '')
@@ -19,6 +35,7 @@ export function SearchView() {
 
   useEffect(() => {
     const query = params.get('q')
+    setError(null)
     if (!query?.trim()) {
       setHits([])
       return
@@ -31,13 +48,13 @@ export function SearchView() {
         from: params.get('from') || undefined,
       })
       .then((h) => {
-        if (!cancelled) {
-          setHits(h)
-          setError(null)
-        }
+        if (!cancelled) setHits(h)
       })
       .catch((e: Error) => {
-        if (!cancelled) setError(e.message)
+        if (!cancelled) {
+          setHits([])
+          setError(e.message)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -55,100 +72,121 @@ export function SearchView() {
     setParams(next)
   }
 
+  const cli = useMemo(
+    () =>
+      `whyso search ${q ? JSON.stringify(q) : '<query>'}${type ? ` --type ${type}` : ''}${from ? ` --from ${from}` : ''}`,
+    [q, type, from],
+  )
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1>Search</h1>
-          <p>Search prompts, files, commits, activities — <code>whyso search</code>.</p>
+          <p>Search prompts, sessions, files, commits and activities.</p>
         </div>
+        <CliHint command={cli} />
       </div>
 
-      <div className="toolbar">
-        <div className="field" style={{ flex: 1 }}>
+      <form
+        className="panel panel-body toolbar"
+        onSubmit={(e) => {
+          e.preventDefault()
+          run()
+        }}
+      >
+        <div className="field grow">
           <label htmlFor="search-q">Query</label>
-          <input
-            id="search-q"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="auth, sess_, …"
-            onKeyDown={(e) => e.key === 'Enter' && run()}
-          />
+          <div className="input-icon">
+            <Search size={15} />
+            <input
+              id="search-q"
+              className="input"
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="auth, a file name, a session id…"
+            />
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="search-type">--type</label>
+        <div className="field narrow">
+          <label htmlFor="search-type">Type (optional)</label>
           <input
             id="search-type"
             value={type}
             onChange={(e) => setType(e.target.value)}
-            placeholder="file | prompt | …"
+            placeholder="file, prompt…"
           />
         </div>
         <div className="field">
-          <label htmlFor="search-from">--from</label>
+          <label htmlFor="search-from">Starting from (optional)</label>
           <input
             id="search-from"
+            className="mono"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            placeholder="commit:sha | node:id"
+            placeholder="commit:<sha> or node:<id>"
           />
         </div>
-        <button type="button" className="btn primary" onClick={run} style={{ alignSelf: 'end' }}>
+        <button type="submit" className="btn primary">
+          <Search size={15} />
           Search
         </button>
-      </div>
+      </form>
 
-      <div className="cli-hint" style={{ marginBottom: 12 }}>
-        whyso search {q || '<query>'}
-        {type ? ` --type ${type}` : ''}
-        {from ? ` --from ${from}` : ''}
-      </div>
-
-      {error && <div className="error-banner">{error}</div>}
-      {loading && <div className="muted">Searching…</div>}
-
-      <div className="panel">
-        <div className="panel-head">
-          <span>Results</span>
-          <span>{hits.length}</span>
+      {error && (
+        <div className="banner" role="alert">
+          <CircleAlert size={15} />
+          <span>{error}</span>
         </div>
-        {hits.length === 0 && !loading ? (
-          <div className="empty">
-            {params.get('q') ? 'No hits' : 'Enter a query'}
-            <br />
-            <code>whyso search &quot;…&quot;</code>
+      )}
+
+      {loading ? (
+        <div className="panel">
+          <SkeletonRows rows={5} />
+        </div>
+      ) : hits.length === 0 ? (
+        !error && (
+          <div className="panel">
+            {activeQuery ? (
+              <EmptyState
+                icon={<SearchX size={20} />}
+                title={`No results for “${activeQuery}”`}
+                hint="Try fewer or different words, or remove the type filter."
+              />
+            ) : (
+              <EmptyState
+                icon={<Search size={20} />}
+                title="Search your captured history"
+                hint="Find the sessions where something was asked, changed or committed."
+              />
+            )}
           </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Node</th>
-                  <th>Field</th>
-                  <th>Snippet</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hits.map((h, i) => (
-                  <tr key={`${h.workNodeId}-${h.field}-${i}`}>
-                    <td className="mono">
-                      <Link to={`/sessions/${encodeURIComponent(h.workNodeId)}`}>{h.workNodeId}</Link>
-                    </td>
-                    <td>
-                      <span className="badge">{h.field}</span>
-                    </td>
-                    <td>
-                      <pre className="pre" style={{ maxHeight: 120, overflow: 'auto' }}>
-                        {h.snippet}
-                      </pre>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        )
+      ) : (
+        <>
+          <div className="result-head">
+            <span className="dim">
+              {hits.length} {hits.length === 1 ? 'result' : 'results'}
+            </span>
           </div>
-        )}
-      </div>
+          <div className="panel">
+            {hits.map((h, i) => (
+              <Link
+                key={`${h.workNodeId}-${h.field}-${i}`}
+                className="search-hit"
+                to={`/sessions/${encodeURIComponent(h.workNodeId)}`}
+              >
+                <div className="row">
+                  <span className="badge">{h.field}</span>
+                  <span className="mono dim truncate">{h.workNodeId}</span>
+                </div>
+                <div className="snippet">{highlight(h.snippet, activeQuery)}</div>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

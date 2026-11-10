@@ -9,14 +9,22 @@ import {
 } from 'react'
 import { api, type SessionInfo, type StatusInfo } from './api'
 
+export type ToastKind = 'success' | 'error'
+
+export interface Toast {
+  message: string
+  kind: ToastKind
+}
+
 export interface AppData {
   status: StatusInfo | null
   sessions: SessionInfo[]
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
-  toast: string | null
-  setToast: (msg: string | null) => void
+  toast: Toast | null
+  /** Show a toast; pass 'error' for failures. `null` dismisses. */
+  setToast: (msg: string | null, kind?: ToastKind) => void
 }
 
 const Ctx = createContext<AppData | null>(null)
@@ -25,12 +33,17 @@ function isSessionList(data: unknown): data is SessionInfo[] {
   return Array.isArray(data) && (data.length === 0 || 'promptExcerpt' in (data[0] as object) || 'id' in (data[0] as object))
 }
 
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusInfo | null>(null)
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToastState] = useState<Toast | null>(null)
+
+  const setToast = useCallback((msg: string | null, kind: ToastKind = 'success') => {
+    setToastState(msg ? { message: msg, kind } : null)
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -59,13 +72,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!toast) return
-    const t = window.setTimeout(() => setToast(null), 3200)
+    const t = window.setTimeout(() => setToastState(null), toast.kind === 'error' ? 6000 : 3200)
     return () => window.clearTimeout(t)
   }, [toast])
 
   const value = useMemo(
     () => ({ status, sessions, loading, error, refresh, toast, setToast }),
-    [status, sessions, loading, error, refresh, toast],
+    [status, sessions, loading, error, refresh, toast, setToast],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

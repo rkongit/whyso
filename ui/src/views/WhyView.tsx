@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { CircleAlert, FileText, GitCommitHorizontal, SearchX, Waypoints } from 'lucide-react'
 import { api, type ProvenanceResult } from '../api'
-import { formatTime, titleFromExcerpt } from '../format'
+import { formatDateTime, shortSha, titleFromExcerpt } from '../format'
+import { CliHint } from '../components/CliHint'
+import { EmptyState } from '../components/EmptyState'
+import { SkeletonRows } from '../components/Skeleton'
+
+type Mode = 'commit' | 'file'
 
 export function WhyView() {
   const [params, setParams] = useSearchParams()
-  const mode = (params.get('mode') as 'commit' | 'file' | null) ?? 'commit'
+  const mode: Mode = params.get('mode') === 'file' ? 'file' : 'commit'
   const [sha, setSha] = useState(params.get('sha') ?? '')
   const [path, setPath] = useState(params.get('path') ?? '')
   const [lines, setLines] = useState(params.get('lines') ?? '')
@@ -24,11 +30,8 @@ export function WhyView() {
     const s = params.get('sha')
     const p = params.get('path')
     const l = params.get('lines') ?? undefined
-    if (m === 'commit' && !s) {
-      setResult(null)
-      return
-    }
-    if (m === 'file' && !p) {
+    setError(null)
+    if ((m === 'commit' && !s) || (m === 'file' && !p)) {
       setResult(null)
       return
     }
@@ -42,13 +45,13 @@ export function WhyView() {
           : Promise.resolve(null)
     req
       .then((r) => {
-        if (!cancelled) {
-          setResult(r)
-          setError(null)
-        }
+        if (!cancelled) setResult(r)
       })
       .catch((e: Error) => {
-        if (!cancelled) setError(e.message)
+        if (!cancelled) {
+          setResult(null)
+          setError(e.message)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -69,57 +72,75 @@ export function WhyView() {
     setParams(next)
   }
 
+  function setMode(m: Mode) {
+    const next = new URLSearchParams(params)
+    next.set('mode', m)
+    setParams(next)
+  }
+
+  const cli =
+    mode === 'commit'
+      ? `whyso why commit ${sha || '<sha>'}`
+      : `whyso why file ${path || '<path>'}${lines ? ` --lines ${lines}` : ''}`
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1>Why</h1>
-          <p>Trace a commit or file back to prompts — <code>whyso why</code>.</p>
+          <p>Trace a commit or a file back to the prompts that produced it.</p>
         </div>
+        <CliHint command={cli} />
       </div>
 
-      <div className="toolbar">
-        <div className="field">
-          <label>Mode</label>
-          <select
-            value={mode}
-            onChange={(e) => {
-              const next = new URLSearchParams(params)
-              next.set('mode', e.target.value)
-              setParams(next)
-            }}
-          >
-            <option value="commit">commit</option>
-            <option value="file">file</option>
-          </select>
+      <form
+        className="panel panel-body toolbar"
+        onSubmit={(e) => {
+          e.preventDefault()
+          run()
+        }}
+      >
+        <div className="field fit">
+          <span className="field-label">Trace a</span>
+          <div className="segmented" role="radiogroup" aria-label="What to trace">
+            <button type="button" role="radio" aria-checked={mode === 'commit'} onClick={() => setMode('commit')}>
+              <GitCommitHorizontal size={15} />
+              Commit
+            </button>
+            <button type="button" role="radio" aria-checked={mode === 'file'} onClick={() => setMode('file')}>
+              <FileText size={15} />
+              File
+            </button>
+          </div>
         </div>
         {mode === 'commit' ? (
-          <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="why-sha">SHA</label>
+          <div className="field grow">
+            <label htmlFor="why-sha">Commit SHA</label>
             <input
               id="why-sha"
+              className="mono"
               value={sha}
               onChange={(e) => setSha(e.target.value)}
-              placeholder="full or prefix"
-              onKeyDown={(e) => e.key === 'Enter' && run()}
+              placeholder="Full SHA or prefix"
             />
           </div>
         ) : (
           <>
-            <div className="field" style={{ flex: 1 }}>
-              <label htmlFor="why-path">Path</label>
+            <div className="field grow">
+              <label htmlFor="why-path">File path</label>
               <input
                 id="why-path"
+                className="mono"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
                 placeholder="src/…"
-                onKeyDown={(e) => e.key === 'Enter' && run()}
               />
             </div>
-            <div className="field">
-              <label htmlFor="why-lines">--lines</label>
+            <div className="field narrow">
+              <label htmlFor="why-lines">Lines (optional)</label>
               <input
                 id="why-lines"
+                className="mono"
                 value={lines}
                 onChange={(e) => setLines(e.target.value)}
                 placeholder="10-42"
@@ -127,59 +148,107 @@ export function WhyView() {
             </div>
           </>
         )}
-        <button type="button" className="btn primary" onClick={run} style={{ alignSelf: 'end' }}>
+        <button type="submit" className="btn primary">
+          <Waypoints size={15} />
           Trace
         </button>
-      </div>
+      </form>
 
-      <div className="cli-hint" style={{ marginBottom: 12 }}>
-        {mode === 'commit'
-          ? `whyso why commit ${sha || '<sha>'}`
-          : `whyso why file ${path || '<path>'}${lines ? ` --lines ${lines}` : ''}`}
-      </div>
+      {error && (
+        <div className="banner" role="alert">
+          <CircleAlert size={15} />
+          <span>{error}</span>
+        </div>
+      )}
 
-      {error && <div className="error-banner">{error}</div>}
-      {loading && <div className="muted">Tracing…</div>}
-
-      {result && (
+      {loading ? (
         <div className="panel">
-          <div className="panel-head">
-            <span>
-              {result.subjectKind}
-              {result.sha ? ` · ${result.sha}` : ''}
-              {result.path ? ` · ${result.path}` : ''}
+          <SkeletonRows rows={4} />
+        </div>
+      ) : result ? (
+        <>
+          <div className="result-head">
+            <span className="badge">{result.subjectKind}</span>
+            <span className="mono truncate">
+              {result.sha ?? result.path}
               {result.startLine != null ? `:${result.startLine}-${result.endLine}` : ''}
             </span>
-            <span>{result.hits.length} hit(s)</span>
+            <span className="grow" />
+            <span className="dim">
+              {result.hits.length} {result.hits.length === 1 ? 'match' : 'matches'}
+            </span>
           </div>
           {result.hits.length === 0 ? (
-            <div className="empty">No captured provenance</div>
-          ) : (
-            <div className="stack" style={{ padding: 12 }}>
-              {result.hits.map((h, i) => (
-                <div key={i} className="block">
-                  <div style={{ marginBottom: 6 }}>
-                    <Link to={`/sessions/${encodeURIComponent(h.workNodeId)}`}>{h.workNodeId}</Link>{' '}
-                    <span className="badge accent">{h.matchKind}</span>
-                    <span className="dim"> · {formatTime(h.startedAt)}</span>
-                  </div>
-                  <pre className="pre">{titleFromExcerpt(h.prompt, h.prompt || '—')}</pre>
-                  {h.plan && (
-                    <pre className="pre dim" style={{ marginTop: 8 }}>
-                      {h.plan.slice(0, 600)}
-                      {h.plan.length > 600 ? '…' : ''}
-                    </pre>
-                  )}
-                  {h.files.length > 0 && (
-                    <div className="mono dim" style={{ marginTop: 6 }}>
-                      files: {h.files.slice(0, 5).join(', ')}
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="panel">
+              <EmptyState
+                icon={<SearchX size={20} />}
+                title="No captured provenance"
+                hint="No recorded session produced this. It may predate Whyso, or was written by hand."
+              />
             </div>
+          ) : (
+            result.hits.map((h, i) => (
+              <article key={i} className="panel hit">
+                <div className="hit-head">
+                  <Link className="title" to={`/sessions/${encodeURIComponent(h.workNodeId)}`}>
+                    {titleFromExcerpt(h.prompt, 'Open session')}
+                  </Link>
+                  <span className="badge accent">{h.matchKind.replace(/_/g, ' ')}</span>
+                </div>
+                <div className="hit-meta">
+                  <span>{formatDateTime(h.startedAt)}</span>
+                  <span className="mono">{h.workNodeId}</span>
+                </div>
+                {h.prompt && (
+                  <div>
+                    <h3 className="section-title">Prompt</h3>
+                    <pre className="pre clamp">{h.prompt}</pre>
+                  </div>
+                )}
+                {h.plan && (
+                  <details className="response">
+                    <summary>Agent response</summary>
+                    <pre className="pre clamp">{h.plan}</pre>
+                  </details>
+                )}
+                {(h.files.length > 0 || h.commits.length > 0) && (
+                  <div className="row wrap">
+                    {h.commits.map((c) => (
+                      <Link
+                        key={c}
+                        className="badge info mono"
+                        to={`/why?mode=commit&sha=${encodeURIComponent(c)}`}
+                      >
+                        {shortSha(c)}
+                      </Link>
+                    ))}
+                    {h.files.slice(0, 6).map((f) => (
+                      <Link
+                        key={f}
+                        className="badge mono"
+                        title={f}
+                        to={`/why?mode=file&path=${encodeURIComponent(f)}`}
+                      >
+                        {f.replace(/\\/g, '/').split('/').pop()}
+                      </Link>
+                    ))}
+                    {h.files.length > 6 && <span className="dim">+{h.files.length - 6} more</span>}
+                  </div>
+                )}
+              </article>
+            ))
           )}
-        </div>
+        </>
+      ) : (
+        !error && (
+          <div className="panel">
+            <EmptyState
+              icon={<Waypoints size={20} />}
+              title="Nothing traced yet"
+              hint="Enter a commit SHA or a file path to see the session and prompt behind it."
+            />
+          </div>
+        )
       )}
     </div>
   )
