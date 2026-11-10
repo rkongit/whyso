@@ -11,6 +11,7 @@ internal static class Migrator
         "005_session_commits_many_sessions.sql",
         "006_work_nodes.sql",
         "007_envelope_v1_1.sql",
+        "008_work_node_event_count.sql",
     ];
 
     public static void Migrate(Microsoft.Data.Sqlite.SqliteConnection connection)

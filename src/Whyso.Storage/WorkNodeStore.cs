@@ -523,6 +523,40 @@ public sealed partial class Store
         }
     }
 
+    /// <summary>
+    /// Sessions with no Work Node yet, or whose projection was built from a different number of
+    /// events than are stored now (events arrived since it was last projected).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListStaleWorkNodeSessionIdsAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var cmd = _connection.CreateCommand();
+            cmd.CommandText =
+                """
+                SELECT s.id
+                FROM sessions s
+                LEFT JOIN work_nodes wn ON wn.session_id = s.id
+                WHERE wn.id IS NULL
+                   OR wn.event_count != (SELECT COUNT(*) FROM events e WHERE e.session_id = s.id)
+                ORDER BY s.started_at ASC
+                """;
+            var list = new List<string>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                list.Add(reader.GetString(0));
+            }
+
+            return list;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private async Task UpsertWorkNodeProjectionUnlockedAsync(
         SqliteTransaction tx,
         WorkNodeProjection projection)
@@ -536,11 +570,11 @@ public sealed partial class Store
                 INSERT INTO work_nodes (
                     id, session_id, project_id, agent, started_at, ended_at,
                     git_head, git_head_after, status, prompt_excerpt,
-                    turn_count, file_count, command_count, test_count, commit_count, updated_at)
+                    turn_count, file_count, command_count, test_count, commit_count, updated_at, event_count)
                 VALUES (
                     $id, $sid, $pid, $agent, $started, $ended,
                     $gh, $gha, $status, $excerpt,
-                    $turns, $files, $cmds, $tests, $commits, $updated)
+                    $turns, $files, $cmds, $tests, $commits, $updated, $events)
                 ON CONFLICT(id) DO UPDATE SET
                     session_id = excluded.session_id,
                     project_id = excluded.project_id,
@@ -556,7 +590,8 @@ public sealed partial class Store
                     command_count = excluded.command_count,
                     test_count = excluded.test_count,
                     commit_count = excluded.commit_count,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    event_count = excluded.event_count
                 """;
             cmd.Parameters.AddWithValue("$id", n.Id);
             cmd.Parameters.AddWithValue("$sid", n.SessionId);
@@ -574,6 +609,7 @@ public sealed partial class Store
             cmd.Parameters.AddWithValue("$tests", n.TestCount);
             cmd.Parameters.AddWithValue("$commits", n.CommitCount);
             cmd.Parameters.AddWithValue("$updated", n.UpdatedAt.ToUniversalTime().ToString("O"));
+            cmd.Parameters.AddWithValue("$events", projection.EventCount);
             await cmd.ExecuteNonQueryAsync();
         }
 

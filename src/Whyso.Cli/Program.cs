@@ -1050,19 +1050,9 @@ public static class Program
 
     private static async Task EnsureNodesAsync(Store store)
     {
-        var count = await store.CountWorkNodesAsync();
-        if (count > 0)
-        {
-            return;
-        }
-
-        var sessions = await store.ListSessionsAsync();
-        if (sessions.Count == 0)
-        {
-            return;
-        }
-
-        await WorkNodeIndex.RebuildAllAsync(store, store.Root);
+        // Covers sessions that are still running (no session-end projection yet) as well as a
+        // database with no projections at all.
+        await WorkNodeIndex.RefreshStaleAsync(store, store.Root);
     }
 
     private static async Task EnsureNodeAsync(Store store, string id)
