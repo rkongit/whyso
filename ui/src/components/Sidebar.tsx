@@ -33,8 +33,10 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img className="brand-mark" src={whysoIcon} alt="" width={26} height={26} />
-        <span>Whyso</span>
+        <img className="brand-mark" src={whysoIcon} alt="" width={28} height={28} />
+        <span>
+          Why<span className="brand-accent">so</span>
+        </span>
       </div>
 
       {NAV.map((g) => (

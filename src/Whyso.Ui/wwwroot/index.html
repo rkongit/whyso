@@ -1,32 +1,34 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/favicon-180.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark" />
-    <title>Whyso</title>
-    <script>
-      // Set the theme before first paint (key shared with src/theme.ts).
-      ;(function () {
-        var t = null
-        try {
-          t = localStorage.getItem('whyso-theme')
-        } catch (e) {}
-        if (t !== 'light' && t !== 'dark') {
-          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-        }
-        document.documentElement.dataset.theme = t
-      })()
-    </script>
-    <script type="module" crossorigin src="/assets/index-BtR6kJAX.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CQgRryaX.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Whyso: code provenance for AI." />
+    <meta name="theme-color" content="#0a0c0e" />
+    <title>Whyso · Code Provenance for AI</title>
+    <script>
+      // Set the theme before first paint (key shared with src/theme.ts).
+      ;(function () {
+        var t = null
+        try {
+          t = localStorage.getItem('whyso-theme')
+        } catch (e) {}
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+        document.documentElement.dataset.theme = t
+      })()
+    </script>
+    <script type="module" crossorigin src="/assets/index-CEdl2cVm.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B8SxdhMx.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
