@@ -14,13 +14,15 @@
   --text-2: #52525b;
   --text-3: #6b6b75;
 
-  --accent: #0d9488;
-  --accent-text: #0f766e;
-  --accent-solid: #0f766e;
-  --accent-solid-hover: #115e59;
+  /* Brand: the logo's green-to-teal ribbon. */
+  --brand: #16a34a;
+  --accent: #059669;
+  --accent-text: #047857;
+  --accent-solid: #047857;
+  --accent-solid-hover: #065f46;
   --on-accent: #ffffff;
-  --accent-soft: rgba(13, 148, 136, 0.1);
-  --accent-ring: rgba(13, 148, 136, 0.35);
+  --accent-soft: rgba(5, 150, 105, 0.1);
+  --accent-ring: rgba(5, 150, 105, 0.35);
 
   --success: #15803d;
   --success-soft: rgba(21, 128, 61, 0.1);
@@ -77,13 +79,14 @@
   --text-2: #a8a8b3;
   --text-3: #80808c;
 
-  --accent: #2dd4bf;
-  --accent-text: #5eead4;
-  --accent-solid: #14b8a6;
-  --accent-solid-hover: #2dd4bf;
-  --on-accent: #042f2e;
-  --accent-soft: rgba(45, 212, 191, 0.12);
-  --accent-ring: rgba(45, 212, 191, 0.4);
+  --brand: #4ade80;
+  --accent: #34d399;
+  --accent-text: #6ee7b7;
+  --accent-solid: #10b981;
+  --accent-solid-hover: #34d399;
+  --on-accent: #022c22;
+  --accent-soft: rgba(52, 211, 153, 0.12);
+  --accent-ring: rgba(52, 211, 153, 0.4);
 
   --success: #4ade80;
   --success-soft: rgba(74, 222, 128, 0.12);

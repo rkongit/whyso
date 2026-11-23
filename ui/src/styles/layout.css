@@ -30,10 +30,13 @@
 }
 
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 28px;
+  height: 28px;
   flex: none;
+}
+
+.brand-accent {
+  color: var(--brand);
 }
 
 .nav-group {

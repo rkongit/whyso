@@ -1,4 +1,9 @@
-# Whyso
+<p align="center">
+  <img src="ui/public/favicon.png" alt="Whyso logo" width="112" />
+</p>
+
+<h1 align="center">Whyso</h1>
+<p align="center"><strong>Code Provenance for AI</strong></p>
 
 Whyso is an open-source provenance layer for AI-assisted software development.
 It records what your coding agents do (prompts, tool calls, file changes,
